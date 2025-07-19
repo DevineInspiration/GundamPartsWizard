@@ -3,65 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CSV Import/Export with Row Parts and Variant SKU</title>
+  <title>Gundam Parts Wizard - Clean Export</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
-    }
-    table {
-      border-collapse: collapse;
-      margin-top: 10px;
-      width: 100%;
-    }
-    table, th, td {
-      border: 1px solid #aaa;
-      padding: 8px;
-    }
-    input[type="text"],
-    input[type="email"],
-    input[type="number"],
-    select {
-      width: 100%;
-      box-sizing: border-box;
-    }
-    input[readonly] {
-      background-color: #eee;
-      color: #555;
-      border: 1px solid #ccc;
-    }
-    button {
-      margin: 10px 5px 0 0;
-    }
-    .copies-view td {
-      background: #fafafa;
-    }
-    .toggleCopiesBtn {
-      cursor: pointer;
-    }
-    select {
-      cursor: pointer;
-    }
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #aaa; padding: 8px; }
+    input, select { width: 100%; box-sizing: border-box; }
+    input[readonly] { background-color: #eee; color: #555; border: 1px solid #ccc; }
+    button { margin-top: 10px; }
+    .parts-view td { background: #fafafa; }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 </head>
 <body>
-  <h1>CSV Import/Export with Row Parts and Variant SKU</h1>
-
-  <label>
-    Global Title: <input type="text" id="globalTitle" placeholder="Enter global title" />
-  </label>
-  <label style="margin-left:20px;">
-    Global Price: <input type="number" id="globalPrice" min="0" step="0.01" value="0" />
-  </label>
-
-  <p>
-    <strong>Instructions:</strong> Import a CSV with columns:
-    <code>ID, Runner Name, Handle, Title, Email, Age, Price, Category, Note, Parts, Barcode</code>.
-    After that, you can add rows manually or edit as needed before exporting.
-  </p>
+  <h1>Gundam Parts Wizard (Clean Export)</h1>
 
   <input type="file" id="csvFileInput" accept=".csv" onchange="importCSV(event)" />
-  <br /><br />
+  
+  <div style="margin-top: 10px;">
+	  <label><strong>Kit Name:</strong></label>
+	  <input type="text" id="globalKitName" placeholder="e.g. RX-78-2 Gundam" style="width: 300px; margin-right: 20px;" />
+	  <label><strong>Part Price:</strong></label>
+	  <input type="number" id="globalPartPrice" placeholder="e.g. 3.50" style="width: 100px;" step="0.01" />
+	</div>
+  
+  <button onclick="addRow()">Add Row</button>
+  <button onclick="downloadCSV()">Download CSV</button>
 
   <table id="inputTable">
     <thead>
@@ -70,371 +37,199 @@
         <th>Runner Name</th>
         <th>Handle</th>
         <th>Title</th>
-        <th>Email</th>
-        <th>Age</th>
-        <th>Price</th>
-        <th>Category</th>
-        <th>Note</th>
         <th>Parts</th>
-        <th>Variant Name</th>
-        <th>Variant SKU</th>
         <th>Parts View</th>
         <th>Barcode</th>
         <th>Remove</th>
       </tr>
     </thead>
-    <tbody id="tableBody">
-      <!-- rows added dynamically -->
-    </tbody>
+    <tbody id="tableBody"></tbody>
   </table>
-
-  <button onclick="addRow()">Add Row</button>
-  <button onclick="downloadCSV()">Download CSV</button>
 
   <script>
     const tableBody = document.getElementById('tableBody');
-    const globalTitleInput = document.getElementById('globalTitle');
-    const globalPriceInput = document.getElementById('globalPrice');
+    const HIDDEN_COLUMNS = [
+      "Variant Grams", "Variant Inventory Tracker", "Variant Inventory Qty",
+      "Variant Inventory Policy", "Variant Fulfillment Service",
+      "Variant Requires Shipping", "Variant Taxable" 
+
+    ];
+    let CSV_HEADER_MAP = {};
 
     function toHandle(str) {
-      return str
-        .toLowerCase()
-        .trim()
-        .replace(/[^\w\s-]/g, '')
-        .replace(/\s+/g, '-')
-        .replace(/--+/g, '-');
+      return str.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
     }
 
-    function addRow(
-      runnerName = '',
-      email = '',
-      age = '',
-      parts = 1,
-      id = '',
-      handle = '',
-      title = '',
-      price = '',
-      category = '',
-      note = '',
-      barcode = ''
-    ) {
+    function addRow(runnerName = '', handle = '', title = '', partsCount = 1, barcode = '', id = '') {
+      const count = tableBody.querySelectorAll('tr').length + 1;
+      const rowId = id || `id-${count}`;
+      const handleVal = handle || `runner-${count}`;
+      const titleVal = title || `Runner ${runnerName}`;
+      const barcodeVal = barcode || '';
+
       const tr = document.createElement('tr');
-
-      if (!id) {
-        id = 'id-' + (tableBody.children.length + 1);
-      }
-
-      if (!handle) {
-        const baseTitle = globalTitleInput.value.trim() || '';
-        const fullTitle = baseTitle ? PART - ${baseTitle} Runner ${runnerName} : Runner ${runnerName};
-        handle = toHandle(fullTitle);
-      }
-
-      if (!title) {
-        const baseTitle = globalTitleInput.value.trim() || '';
-        title = baseTitle ? PART - ${baseTitle} Runner ${runnerName} : Runner ${runnerName};
-      }
-
-      if (!price) {
-        price = globalPriceInput.value.trim() || '0';
-      }
-
       tr.innerHTML = `
-        <td><input name="id" type="text" value="${id}" readonly style="background:#eee;color:#555;" /></td>
-        <td><input name="runnerName" type="text" value="${runnerName}" required /></td>
-        <td><input name="handle" type="text" value="${handle}" readonly style="background:#eee;color:#555;" /></td>
-        <td><input name="title" type="text" value="${title}" required /></td>
-        <td><input name="email" type="email" value="${email}" required /></td>
-        <td><input name="age" type="number" value="${age}" required /></td>
-        <td><input name="price" type="number" value="${price}" readonly style="background:#eee;color:#555;" step="0.01" /></td>
-        <td><input name="category" type="text" value="${category}" readonly style="background:#eee;color:#555;" /></td>
-        <td><input name="note" type="text" value="${note}" /></td>
-        <td><input name="parts" type="number" value="${parts}" min="1" required /></td>
-        <td><input name="variantName" type="text" value="" readonly style="background:#eee;color:#555;" /></td>
-        <td><input name="variantSKU" type="text" value="" readonly style="background:#eee;color:#555;" /></td>
-        <td><button type="button" class="togglePartsBtn">Show</button></td>
-        <td><input name="barcode" type="text" value="${barcode}" /></td>
-        <td><button type="button" onclick="removeRow(this)">Remove</button></td>
+        <td><input name="id" value="${rowId}" readonly /></td>
+        <td><input name="runnerName" value="${runnerName}" /></td>
+        <td><input name="Handle" value="${handleVal}" /></td>
+        <td><input name="title" value="${titleVal}" /></td>
+        <td><input name="parts" type="number" value="${partsCount}" min="1" /></td>
+        <td><button onclick="toggleParts(this)">Show</button></td>
+        <td><input name="barcode" value="${barcodeVal}" /></td>
+        <td><button onclick="removeRow(this)">Remove</button></td>
       `;
-
       tableBody.appendChild(tr);
-      updateRowFields(tr);
-      setupTogglePartsButton(tr);
-
-      const runnerNameInput = tr.querySelector('input[name="runnerName"]');
-      const partsInput = tr.querySelector('input[name="parts"]');
-      const barcodeInput = tr.querySelector('input[name="barcode"]');
-      runnerNameInput.addEventListener('input', () => updateRowFields(tr));
-      partsInput.addEventListener('input', () => updateRowFields(tr));
-      barcodeInput.addEventListener('input', () => updateRowFields(tr));
     }
 
-    function removeRow(button) {
-      const row = button.closest('tr');
+    function removeRow(btn) {
+      const row = btn.closest('tr');
       const next = row.nextElementSibling;
-      if (next && next.classList.contains('parts-view')) {
-        next.remove();
-      }
+      if (next && next.classList.contains('parts-view')) next.remove();
       row.remove();
     }
 
-    function updateRowFields(row) {
-      const runnerNameInput = row.querySelector('input[name="runnerName"]');
-      const titleInput = row.querySelector('input[name="title"]');
-      const handleInput = row.querySelector('input[name="handle"]');
-      const priceInput = row.querySelector('input[name="price"]');
-      const partsInput = row.querySelector('input[name="parts"]');
-      const variantInput = row.querySelector('input[name="variantName"]');
-      const variantSKUInput = row.querySelector('input[name="variantSKU"]');
-      const barcodeInput = row.querySelector('input[name="barcode"]');
-
-      const runnerName = runnerNameInput.value.trim();
-      const globalTitle = globalTitleInput.value.trim();
-      const fullTitle = globalTitle ? PART - ${globalTitle} Runner ${runnerName} : Runner ${runnerName};
-      titleInput.value = fullTitle;
-      handleInput.value = toHandle(fullTitle);
-      priceInput.value = globalPriceInput.value.trim() || '0';
-
-      // Variant Name WITHOUT spaces between RunnerName and copy number
-      variantInput.value = ${runnerName}-${1};
-
-      // Variant SKU WITH space between barcode and variant name
-      variantSKUInput.value = ${barcodeInput.value} ${variantInput.value};
-
+    function toggleParts(btn) {
+      const row = btn.closest('tr');
       const next = row.nextElementSibling;
       if (next && next.classList.contains('parts-view')) {
-        renderPartsView(row, next);
-      }
-    }
-
-    function updateAllRows() {
-      for (const row of tableBody.querySelectorAll('tr')) {
-        updateRowFields(row);
-      }
-    }
-
-    globalTitleInput.addEventListener('input', updateAllRows);
-    globalPriceInput.addEventListener('input', updateAllRows);
-
-    function setupTogglePartsButton(row) {
-      const btn = row.querySelector('.togglePartsBtn');
-      btn.onclick = () => {
-        const next = row.nextElementSibling;
-        if (next && next.classList.contains('parts-view')) {
-          next.remove();
-          btn.textContent = 'Show';
-        } else {
-          showPartsForRow(row, btn);
-        }
-      };
-    }
-
-    function showPartsForRow(row, btn) {
-      const next = row.nextElementSibling;
-      if (next && next.classList.contains('parts-view')) {
+        next.remove();
+        btn.textContent = 'Show';
         return;
       }
-      const partsCount = parseInt(row.querySelector('input[name="parts"]').value) || 1;
-      if (partsCount < 1) return;
-      const partsView = document.createElement('tr');
-      partsView.classList.add('parts-view');
-      partsView.innerHTML = <td colspan="15"></td>;
-      row.parentNode.insertBefore(partsView, row.nextSibling);
-      renderPartsView(row, partsView);
-      btn.textContent = 'Hide';
-    }
 
-    function renderPartsView(row, partsView) {
-      const partsCount = parseInt(row.querySelector('input[name="parts"]').value) || 1;
-      const runnerName = row.querySelector('input[name="runnerName"]').value.trim();
+      const runnerName = row.querySelector('[name="runnerName"]').value;
+      const handle = row.querySelector('[name="Handle"]').value;
+      const title = row.querySelector('[name="title"]').value;
+      const partsCount = parseInt(row.querySelector('[name="parts"]').value) || 1;
+      const barcode = row.querySelector('[name="barcode"]').value;
 
-      const handle = row.querySelector('input[name="handle"]').value;
-      const title = row.querySelector('input[name="title"]').value;
-      const email = row.querySelector('input[name="email"]').value;
-      const age = row.querySelector('input[name="age"]').value;
-      const price = row.querySelector('input[name="price"]').value;
-      const category = row.querySelector('input[name="category"]').value;
-      const note = row.querySelector('input[name="note"]').value;
-      const barcode = row.querySelector('input[name="barcode"]').value;
-
-      let html = `<table style="width:100%; border-collapse: collapse;" border="1">
-        <thead>
-          <tr>
-            <th>Part #</th>
-            <th>Variant Name</th>
-            <th>Variant SKU</th>
-            <th>Runner Name</th>
-            <th>Handle</th>
-            <th>Title</th>
-            <th>Email</th>
-            <th>Age</th>
-            <th>Price</th>
-            <th>Category</th>
-            <th>Note</th>
-            <th>Barcode</th>
-          </tr>
-        </thead>
-        <tbody>`;
+      const viewRow = document.createElement('tr');
+      viewRow.className = 'parts-view';
+      let html = `<td colspan="8"><table border="1" width="100%"><tr>
+        <th>#</th><th>Variant Name</th><th>Variant SKU</th><th>Runner</th><th>Title</th></tr>`;
 
       for (let i = 1; i <= partsCount; i++) {
-        const variantName = ${runnerName}-${i};
-        const variantSKU = ${barcode} ${variantName};
+        const variantName = `${runnerName}-${i}`;
+        const variantSKU = `${barcode} ${variantName}`;
         html += `<tr>
           <td>${i}</td>
-          <td><input type="text" readonly value="${variantName}" style="background:#eee;color:#555;border:none;width:100%;" /></td>
-          <td><input type="text" readonly value="${variantSKU}" style="background:#eee;color:#555;border:none;width:100%;" /></td>
-          <td><input type="text" readonly value="${runnerName}" style="background:#eee;color:#555;border:none;width:100%;" /></td>
-          <td><input type="text" readonly value="${handle}" style="background:#eee;color:#555;border:none;width:100%;" /></td>
-          <td><input type="text" readonly value="${title}" style="background:#eee;color:#555;border:none;width:100%;" /></td>
-          <td><input type="email" readonly value="${email}" style="background:#eee;color:#555;border:none;width:100%;" /></td>
-          <td><input type="number" readonly value="${age}" style="background:#eee;color:#555;border:none;width:100%;" /></td>
-          <td><input type="number" readonly value="${price}" style="background:#eee;color:#555;border:none;width:100%;" step="0.01" /></td>
-          <td><input type="text" readonly value="${category}" style="background:#eee;color:#555;border:none;width:100%;" /></td>
-          <td><input type="text" readonly value="${note}" style="background:#eee;color:#555;border:none;width:100%;" /></td>
-          <td><input type="text" readonly value="${barcode}" style="background:#eee;color:#555;border:none;width:100%;" /></td>
+          <td>${variantName}</td>
+          <td>${variantSKU}</td>
+          <td>${runnerName}</td>
+          <td>${title}</td>
         </tr>`;
       }
 
-      html += </tbody></table>;
-      partsView.querySelector('td').innerHTML = html;
+      html += `</table></td>`;
+      viewRow.innerHTML = html;
+      row.after(viewRow);
+      btn.textContent = 'Hide';
     }
 
-    // Export CSV
-    function downloadCSV() {
-      const csvRows = [];
+    function importCSV(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => parseCSV(e.target.result);
+      reader.readAsText(file);
+    }
 
-      // Header row
-      csvRows.push([
-        'ID',
-        'Runner Name',
-        'Handle',
-        'Title',
-        'Email',
-        'Age',
-        'Price',
-        'Category',
-        'Note',
-        'Parts',
-        'Barcode',
-      ]);
+	function parseCSV(text) {
+	  tableBody.innerHTML = '';
+
+	  const result = Papa.parse(text, {
+		header: true,
+		skipEmptyLines: true,
+	  });
+
+	  const data = result.data;
+	  const groups = {};
+
+	  data.forEach((row, i) => {
+		const handle = row['Handle'] || `handle-${i}`;
+		if (!groups[handle]) groups[handle] = [];
+		groups[handle].push(row);
+	  });
+
+	  let count = 0;
+	  for (const handle in groups) {
+		const rows = groups[handle];
+		const main = rows[0];
+		const title = main['Title'] || handle;
+		const barcode = main['Variant SKU'] || '';
+		const runnerName = main['Runner Name'] || handle.split('-').slice(-1)[0];
+		const partsCount = rows.length;
+
+		addRow(runnerName, handle, title, partsCount, barcode, `id-${++count}`);
+		const lastRow = tableBody.lastElementChild;
+		lastRow.dataset.parts = JSON.stringify(rows.slice(1));
+		lastRow.dataset.handle = handle;
+		lastRow.dataset.title = title;
+		lastRow.dataset.barcode = barcode;
+
+		// Collect hidden column data
+		lastRow.dataset.hidden = JSON.stringify(
+		  rows.map(r => {
+			const extra = {};
+			for (const col of HIDDEN_COLUMNS) {
+			  extra[col] = r[col] || '';
+			}
+			return extra;
+		  })
+		);
+	  }
+	}
+
+	function downloadCSV() {
+      const kitName = document.getElementById('globalKitName')?.value.trim() || '';
+      const partPrice = document.getElementById('globalPartPrice')?.value.trim() || '';
+
+      const rows = [['Handle','Title','Body(HTML)','Vendor','Product Category','Type','Tags','Published','Option1 Name','Option1 Value','Option1 Linked To','Option2 Name','Option2 Value','Option2 Linked To','Option3 Name','Option3 Value','Option3 Linked To','Variant SKU','Barcode','Kit Name','Part Price', ...HIDDEN_COLUMNS]];
 
       for (const row of tableBody.querySelectorAll('tr')) {
-        const id = row.querySelector('input[name="id"]').value.trim();
-        const runnerName = row.querySelector('input[name="runnerName"]').value.trim();
-        const handle = row.querySelector('input[name="handle"]').value.trim();
-        const title = row.querySelector('input[name="title"]').value.trim();
-        const email = row.querySelector('input[name="email"]').value.trim();
-        const age = row.querySelector('input[name="age"]').value.trim();
-        const price = row.querySelector('input[name="price"]').value.trim();
-        const category = row.querySelector('input[name="category"]').value.trim();
-        const note = row.querySelector('input[name="note"]').value.trim();
-        const partsCount = parseInt(row.querySelector('input[name="parts"]').value) || 1;
-        const barcode = row.querySelector('input[name="barcode"]').value.trim();
+        if (row.classList.contains('parts-view')) continue;
 
-        // Export one row per part (parts field remains as in main row)
+        const handleInput = row.querySelector('[name="Handle"]');
+        const titleInput = row.querySelector('[name="title"]');
+        const partsInput = row.querySelector('[name="parts"]');
+        const barcodeInput = row.querySelector('[name="barcode"]');
+        const runnerInput = row.querySelector('[name="runnerName"]');
+
+        if (!handleInput || !titleInput || !partsInput || !barcodeInput || !runnerInput) continue;
+
+        const handle = handleInput.value.trim();
+        const title = titleInput.value.trim();
+        const partsCount = parseInt(partsInput.value.trim()) || 1;
+        const barcode = barcodeInput.value.trim();
+        const runner = runnerInput.value.trim();
+
+        const hiddenParts = JSON.parse(row.dataset.hidden || '[]');
+
         for (let i = 1; i <= partsCount; i++) {
-          csvRows.push([
-            id,
-            runnerName,
-            handle,
-            title,
-            email,
-            age,
-            price,
-            category,
-            note,
-            partsCount,
-            barcode,
+          const vName = `${runner}-${i}`;
+          const vSKU = `${barcode} ${vName}`;
+          const hidden = hiddenParts[i - 1] || {};
+          rows.push([
+            handle, title, '', '', '', '', '', '',
+            'Part Number', vName, '', '', '', '', '', '', '',
+            vSKU, barcode, kitName, partPrice,
+            ...HIDDEN_COLUMNS.map(k => (hidden[k]?.trim?.() || "").trim())
           ]);
         }
       }
 
-      // Convert array to CSV string
-      const csvContent = csvRows
-        .map(row =>
-          row
-            .map(field => "${field.replace(/"/g, '""')}")
-            .join(',')
-        )
-        .join('\n');
-
-      // Download CSV file
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+	  const content = rows.map(r => r.map(f => `"${String(f).replace(/"/g, '""')}"`).join(',')).join('\\r\n');
+	  
+      const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = 'export.csv';
-      link.style.display = 'none';
+      link.download = 'gundam_parts_clean_export.csv';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     }
 
-    // CSV Import
-    function importCSV(event) {
-      const file = event.target.files[0];
-      if (!file) return;
 
-      const reader = new FileReader();
-      reader.onload = e => {
-        const text = e.target.result;
-        parseCSV(text);
-      };
-      reader.readAsText(file);
-    }
-
-    // Parse CSV
-    function parseCSV(text) {
-      // Clear current rows
-      tableBody.innerHTML = '';
-
-      // Split lines
-      const lines = text.trim().split(/\r?\n/);
-
-      if (lines.length < 2) {
-        alert('CSV file is empty or invalid.');
-        return;
-      }
-
-      // Header processing
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-
-      // Index mapping for expected fields
-      const idxId = headers.indexOf('id');
-      const idxRunnerName = headers.indexOf('runner name');
-      const idxHandle = headers.indexOf('handle');
-      const idxTitle = headers.indexOf('title');
-      const idxEmail = headers.indexOf('email');
-      const idxAge = headers.indexOf('age');
-      const idxPrice = headers.indexOf('price');
-      const idxCategory = headers.indexOf('category');
-      const idxNote = headers.indexOf('note');
-      const idxParts = headers.indexOf('parts');
-      const idxBarcode = headers.indexOf('barcode');
-
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-
-        // Use regex to parse CSV line with quoted fields correctly
-        const parts = line.match(/("([^"]|"")*"|[^,]+)/g).map(s => s.replace(/^"|"$/g, '').replace(/""/g, '"'));
-
-        addRow(
-          parts[idxRunnerName] || '',
-          parts[idxEmail] || '',
-          parts[idxAge] || '',
-          parts[idxParts] ? parseInt(parts[idxParts]) : 1,
-          parts[idxId] || '',
-          parts[idxHandle] || '',
-          parts[idxTitle] || '',
-          parts[idxPrice] || '',
-          parts[idxCategory] || '',
-          parts[idxNote] || '',
-          parts[idxBarcode] || ''
-        );
-      }
-    }
-
-    // Initialize with one empty row
     addRow();
   </script>
 </body>
