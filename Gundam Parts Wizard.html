@@ -21,11 +21,13 @@
   <input type="file" id="csvFileInput" accept=".csv" onchange="importCSV(event)" />
   
   <div style="margin-top: 10px;">
-	  <label><strong>Kit Name:</strong></label>
-	  <input type="text" id="globalKitName" placeholder="e.g. RX-78-2 Gundam" style="width: 300px; margin-right: 20px;" />
-	  <label><strong>Part Price:</strong></label>
-	  <input type="number" id="globalPartPrice" placeholder="e.g. 3.50" style="width: 100px;" step="0.01" />
-	</div>
+    <label><strong>Kit Name:</strong></label>
+    <input type="text" id="globalKitName" placeholder="e.g. RX-78-2 Gundam" style="width: 300px; margin-right: 20px;" />
+	<label><strong>Kit Barcode:</strong></label>
+	<input type="text" id="globalBarcode" placeholder="e.g. 4573102616074" style="width: 150px; margin-left: 10px;" />
+    <label><strong>Part Price:</strong></label>
+    <input type="number" id="globalPartPrice" placeholder="e.g. 3.50" style="width: 100px;" step="0.01" />
+  </div>
   
   <button onclick="addRow()">Add Row</button>
   <button onclick="downloadCSV()">Download CSV</button>
@@ -51,14 +53,8 @@
     const HIDDEN_COLUMNS = [
       "Variant Grams", "Variant Inventory Tracker", "Variant Inventory Qty",
       "Variant Inventory Policy", "Variant Fulfillment Service",
-      "Variant Requires Shipping", "Variant Taxable" 
-
+      "Variant Requires Shipping", "Variant Taxable"
     ];
-    let CSV_HEADER_MAP = {};
-
-    function toHandle(str) {
-      return str.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
-    }
 
     function addRow(runnerName = '', handle = '', title = '', partsCount = 1, barcode = '', id = '') {
       const count = tableBody.querySelectorAll('tr').length + 1;
@@ -80,6 +76,58 @@
       `;
       tableBody.appendChild(tr);
     }
+	
+	function addRow(runnerName = '', handle = '', title = '', partsCount = 1, barcode = '', id = '') {
+	  const count = tableBody.querySelectorAll('tr').length + 1;
+	  const rowId = id || `id-${count}`;
+	  let runnerVal = runnerName || `R${count}`;
+
+	  const globalTitle = document.getElementById('globalKitName')?.value.trim() || 'Untitled';
+	  let titleVal;
+	  if (!runnerName) {
+		titleVal = `PART - ${globalTitle} - Runner ${runnerVal}`;
+	  } else {
+		titleVal = title || `Runner ${runnerVal}`;
+	  }
+
+	  // Remove spaces around hyphens only
+	  titleVal = titleVal.replace(/\s*-\s*/g, '-');
+
+	  // Always generate handle from title
+	  const handleVal = toHandle(titleVal);
+
+	  // Get Kit Barcode if not provided
+	  const globalBarcode = document.getElementById('globalBarcode')?.value.trim() || '';
+	  const barcodeVal = barcode || globalBarcode || runnerVal;
+
+	  const tr = document.createElement('tr');
+	  tr.innerHTML = `
+		<td><input name="id" value="${rowId}" readonly /></td>
+		<td><input name="runnerName" value="${runnerVal}" /></td>
+		<td><input name="Handle" value="${handleVal}" /></td>
+		<td><input name="title" value="${titleVal}" /></td>
+		<td><input name="parts" type="number" value="${partsCount}" min="1" /></td>
+		<td><button onclick="toggleParts(this)">Show</button></td>
+		<td><input name="barcode" value="${barcodeVal}" /></td>
+		<td><button onclick="removeRow(this)">Remove</button></td>
+	  `;
+	  tableBody.appendChild(tr);
+
+	  // Add event listener to update title and handle on runnerName change
+	  const runnerInput = tr.querySelector('[name="runnerName"]');
+	  const titleInput = tr.querySelector('[name="title"]');
+	  const handleInput = tr.querySelector('[name="Handle"]');
+
+	  runnerInput.addEventListener('input', () => {
+		let newRunner = runnerInput.value.trim() || `R${count}`;
+		const currentKitName = document.getElementById('globalKitName')?.value.trim() || 'Untitled';
+		let newTitle = `PART - ${currentKitName} - Runner ${newRunner}`;
+
+		newTitle = newTitle.replace(/\s*-\s*/g, '-');
+		titleInput.value = newTitle;
+		handleInput.value = toHandle(newTitle);
+	  });
+	}
 
     function removeRow(btn) {
       const row = btn.closest('tr');
@@ -98,7 +146,6 @@
       }
 
       const runnerName = row.querySelector('[name="runnerName"]').value;
-      const handle = row.querySelector('[name="Handle"]').value;
       const title = row.querySelector('[name="title"]').value;
       const partsCount = parseInt(row.querySelector('[name="parts"]').value) || 1;
       const barcode = row.querySelector('[name="barcode"]').value;
@@ -110,7 +157,10 @@
 
       for (let i = 1; i <= partsCount; i++) {
         const variantName = `${runnerName}-${i}`;
-        const variantSKU = `${barcode} ${variantName}`;
+        let variantSKU = barcode;
+        if (!barcode.includes('-')) {
+          variantSKU = `${barcode} ${variantName}`;
+        }
         html += `<tr>
           <td>${i}</td>
           <td>${variantName}</td>
@@ -125,6 +175,10 @@
       row.after(viewRow);
       btn.textContent = 'Hide';
     }
+	
+	function toHandle(str) {
+		return str.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
+	}
 
     function importCSV(event) {
       const file = event.target.files[0];
@@ -134,53 +188,52 @@
       reader.readAsText(file);
     }
 
-	function parseCSV(text) {
-	  tableBody.innerHTML = '';
+    function parseCSV(text) {
+      tableBody.innerHTML = '';
 
-	  const result = Papa.parse(text, {
-		header: true,
-		skipEmptyLines: true,
-	  });
+      const result = Papa.parse(text, {
+        header: true,
+        skipEmptyLines: true,
+      });
 
-	  const data = result.data;
-	  const groups = {};
+      const data = result.data;
+      const groups = {};
 
-	  data.forEach((row, i) => {
-		const handle = row['Handle'] || `handle-${i}`;
-		if (!groups[handle]) groups[handle] = [];
-		groups[handle].push(row);
-	  });
+      data.forEach((row, i) => {
+        const handle = row['Handle'] || `handle-${i}`;
+        if (!groups[handle]) groups[handle] = [];
+        groups[handle].push(row);
+      });
 
-	  let count = 0;
-	  for (const handle in groups) {
-		const rows = groups[handle];
-		const main = rows[0];
-		const title = main['Title'] || handle;
-		const barcode = main['Variant SKU'] || '';
-		const runnerName = main['Runner Name'] || handle.split('-').slice(-1)[0];
-		const partsCount = rows.length;
+      let count = 0;
+      for (const handle in groups) {
+        const rows = groups[handle];
+        const main = rows[0];
+        const title = main['Title'] || handle;
+        const barcode = main['Variant Barcode'].replace(/'/g, '') || '';
+        const runnerName = main['Runner Name'] || handle.split('-').slice(-1)[0];
+        const partsCount = rows.length;
 
-		addRow(runnerName, handle, title, partsCount, barcode, `id-${++count}`);
-		const lastRow = tableBody.lastElementChild;
-		lastRow.dataset.parts = JSON.stringify(rows.slice(1));
-		lastRow.dataset.handle = handle;
-		lastRow.dataset.title = title;
-		lastRow.dataset.barcode = barcode;
+        addRow(runnerName, handle, title, partsCount, barcode, `id-${++count}`);
+        const lastRow = tableBody.lastElementChild;
+        lastRow.dataset.parts = JSON.stringify(rows.slice(1));
+        lastRow.dataset.handle = handle;
+        lastRow.dataset.title = title;
+        lastRow.dataset.barcode = barcode;
 
-		// Collect hidden column data
-		lastRow.dataset.hidden = JSON.stringify(
+        lastRow.dataset.hidden = JSON.stringify(
 		  rows.map(r => {
 			const extra = {};
 			for (const col of HIDDEN_COLUMNS) {
-			  extra[col] = r[col] || '';
+			  extra[col] = col === "Variant Grams" ? '10' : (r[col] || '');
 			}
 			return extra;
 		  })
 		);
-	  }
-	}
+      }
+    }
 
-	function downloadCSV() {
+    function downloadCSV() {
       const kitName = document.getElementById('globalKitName')?.value.trim() || '';
       const partPrice = document.getElementById('globalPartPrice')?.value.trim() || '';
 
@@ -207,19 +260,30 @@
 
         for (let i = 1; i <= partsCount; i++) {
           const vName = `${runner}-${i}`;
-          const vSKU = `${barcode} ${vName}`;
+          let vSKU = barcode;
+          if (!barcode.includes('-')) {
+            vSKU = `${barcode} ${vName}`;
+          }
           const hidden = hiddenParts[i - 1] || {};
           rows.push([
             handle, title, '', '', '', '', '', '',
             'Part Number', vName, '', '', '', '', '', '', '',
             vSKU, barcode, kitName, partPrice,
-            ...HIDDEN_COLUMNS.map(k => (hidden[k]?.trim?.() || "").trim())
+            ...HIDDEN_COLUMNS.map(k => {
+			  if (k === "Variant Grams") return "10";
+			  if (k === "Variant Inventory Tracker") return "shopify";
+			  if (k === "Variant Inventory Policy") return "deny";
+			  if (k === "Variant Fulfillment Service") return "manual";
+			  if (k === "Variant Requires Shipping") return "TRUE";
+			  if (k === "Variant Taxable") return "TRUE";
+			  return (hidden[k]?.trim?.() || "").trim();
+			})
           ]);
         }
       }
 
-	  const content = rows.map(r => r.map(f => `"${String(f).replace(/"/g, '""')}"`).join(',')).join('\\r\n');
-	  
+      const content = rows.map(r => r.map(f => `"${String(f).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+
       const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
@@ -228,7 +292,6 @@
       link.click();
       document.body.removeChild(link);
     }
-
 
     addRow();
   </script>
