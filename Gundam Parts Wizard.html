@@ -16,7 +16,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 </head>
 <body>
-  <h1>Gundam Parts Wizard (Clean Export)</h1>
+  <h1>Gundam Parts Listing Wizard </h1>
 
   <input type="file" id="csvFileInput" accept=".csv" onchange="importCSV(event)" />
   
@@ -52,8 +52,8 @@
     const tableBody = document.getElementById('tableBody');
     const HIDDEN_COLUMNS = [
       "Variant Grams", "Variant Inventory Tracker", "Variant Inventory Qty",
-      "Variant Inventory Policy", "Variant Fulfillment Service",
-      "Variant Requires Shipping", "Variant Taxable"
+      "Variant Inventory Policy", "Variant Fulfillment Service", "Variant Price", 
+	  "Variant Compare At Price","Variant Requires Shipping", "Variant Taxable"
     ];
 
     function addRow(runnerName = '', handle = '', title = '', partsCount = 1, barcode = '', id = '') {
@@ -75,7 +75,7 @@
         <td><button onclick="removeRow(this)">Remove</button></td>
       `;
       tableBody.appendChild(tr);
-    }
+    } 
 	
 	function addRow(runnerName = '', handle = '', title = '', partsCount = 1, barcode = '', id = '') {
 	  const count = tableBody.querySelectorAll('tr').length + 1;
@@ -121,7 +121,7 @@
 	  runnerInput.addEventListener('input', () => {
 		let newRunner = runnerInput.value.trim() || `R${count}`;
 		const currentKitName = document.getElementById('globalKitName')?.value.trim() || 'Untitled';
-		let newTitle = `PART - ${currentKitName} - Runner ${newRunner}`;
+		let newTitle = `PART - ${currentKitName} - Runner ${newRunner.toUpperCase()}`;
 
 		newTitle = newTitle.replace(/\s*-\s*/g, '-');
 		titleInput.value = newTitle;
@@ -153,7 +153,7 @@
       const viewRow = document.createElement('tr');
       viewRow.className = 'parts-view';
       let html = `<td colspan="8"><table border="1" width="100%"><tr>
-        <th>#</th><th>Variant Name</th><th>Variant SKU</th><th>Runner</th><th>Title</th></tr>`;
+        <th>#</th><th>Variant Name</th><th>Variant SKU</th><th>Runner</th><th>Title</th><th>Inventory Qty</th><th>Part Price</th></tr>`;
 
       for (let i = 1; i <= partsCount; i++) {
         const variantName = `${runnerName}-${i}`;
@@ -167,6 +167,8 @@
           <td>${variantSKU}</td>
           <td>${runnerName}</td>
           <td>${title}</td>
+		  <td><input name="inventoryQty-${variantName}" type="number" value="1" min="0" /></td>
+		  <td><input name="partPrice-${variantName}" type="number" value="" step="0.01" min="0" /></td>
         </tr>`;
       }
 
@@ -198,13 +200,30 @@
 
       const data = result.data;
       const groups = {};
+	  const runnerMetadata = {}; // Store first occurrence info
 
-      data.forEach((row, i) => {
-        const handle = row['Handle'] || `handle-${i}`;
-        if (!groups[handle]) groups[handle] = [];
-        groups[handle].push(row);
-      });
-
+	  data.forEach((row, i) => {
+		const handle = row['Handle'] || `handle-${i}`;
+		if (!groups[handle]) {
+		  groups[handle] = [];
+		  runnerMetadata[handle] = {
+		  bodyHTML: row["Body (HTML)"] || 'not read',
+		  vendor: row["Vendor"] || '',
+		  category: row["Product Category"] || '',
+		  type: row["Type"] || '',
+		  tags: row["Tags"] || '',
+		  published: row["Published"] || '',
+		  image: row["Image Src"] || '',
+		  grade: row["Grade (product.metafields.custom.grade)"] || '',
+		  note: row["Note (product.metafields.custom.note)"] || '',
+		  scale: row["Scale (product.metafields.custom.scale)"] || '',
+		  series: row["Series (product.metafields.custom.series)"] || '',
+		  reference: row["SupplierReference (product.metafields.custom.supplierreference)"] || '',
+		  status: row["Status"] || '',
+		};
+	  }
+	groups[handle].push(row);
+	});
       let count = 0;
       for (const handle in groups) {
         const rows = groups[handle];
@@ -220,6 +239,9 @@
         lastRow.dataset.handle = handle;
         lastRow.dataset.title = title;
         lastRow.dataset.barcode = barcode;
+		lastRow.dataset.metadata = JSON.stringify(runnerMetadata[handle]);
+		console.log('Metadata for runner', handle, runnerMetadata[handle]);
+		console.log("Headers detected:", Object.keys(data[0]));
 
         lastRow.dataset.hidden = JSON.stringify(
 		  rows.map(r => {
@@ -234,64 +256,152 @@
     }
 
     function downloadCSV() {
-      const kitName = document.getElementById('globalKitName')?.value.trim() || '';
-      const partPrice = document.getElementById('globalPartPrice')?.value.trim() || '';
+	  const kitName = document.getElementById('globalKitName')?.value.trim() || '';
+	  const partPrice = document.getElementById('globalPartPrice')?.value.trim() || '';
 
-      const rows = [['Handle','Title','Body(HTML)','Vendor','Product Category','Type','Tags','Published','Option1 Name','Option1 Value','Option1 Linked To','Option2 Name','Option2 Value','Option2 Linked To','Option3 Name','Option3 Value','Option3 Linked To','Variant SKU','Barcode','Kit Name','Part Price', ...HIDDEN_COLUMNS]];
+	  const rows = [[
+		'Handle', 'Title', 'Body(HTML)', 'Vendor', 'Product Category', 'Type', 'Tags', 'Published',
+		'Option1 Name', 'Option1 Value', 'Option1 Linked To',
+		'Option2 Name', 'Option2 Value', 'Option2 Linked To',
+		'Option3 Name', 'Option3 Value', 'Option3 Linked To',
+		'Variant SKU', 
+		...HIDDEN_COLUMNS,'Variant Barcode','Image Src','Image Position','Image Alt Text',
+		'Gift Card','SEO Title','SEO Description','Google Shopping / Google Product Category',
+		'Google Shopping / Gender','Google Shopping / Age Group','Google Shopping / MPN',
+		'Google Shopping / Condition','Google Shopping / Custom Product','Google Shopping / Custom Label 0',
+		'Google Shopping / Custom Label 1','Google Shopping / Custom Label 2','Google Shopping / Custom Label 3',
+		'Google Shopping / Custom Label 4','Grade (product.metafields.custom.grade)','Note (product.metafields.custom.note)',
+		'Scale (product.metafields.custom.scale)','Series (product.metafields.custom.series)',
+		'SupplierReference (product.metafields.custom.supplierreference)','Variant Image',
+		'Variant Weight Unit','Variant Tax Code','Cost per item','Status',
+	  ]];
 
-      for (const row of tableBody.querySelectorAll('tr')) {
-        if (row.classList.contains('parts-view')) continue;
+	  const seenRunners = new Set();
 
-        const handleInput = row.querySelector('[name="Handle"]');
-        const titleInput = row.querySelector('[name="title"]');
-        const partsInput = row.querySelector('[name="parts"]');
-        const barcodeInput = row.querySelector('[name="barcode"]');
-        const runnerInput = row.querySelector('[name="runnerName"]');
+	  for (const row of tableBody.querySelectorAll('tr')) {
+		if (row.classList.contains('parts-view')) continue;
 
-        if (!handleInput || !titleInput || !partsInput || !barcodeInput || !runnerInput) continue;
+		const handleInput = row.querySelector('[name="Handle"]');
+		const titleInput = row.querySelector('[name="title"]');
+		const partsInput = row.querySelector('[name="parts"]');
+		const barcodeInput = row.querySelector('[name="barcode"]');
+		const runnerInput = row.querySelector('[name="runnerName"]');
 
-        const handle = handleInput.value.trim();
-        const title = titleInput.value.trim();
-        const partsCount = parseInt(partsInput.value.trim()) || 1;
-        const barcode = barcodeInput.value.trim();
-        const runner = runnerInput.value.trim();
+		if (!handleInput || !titleInput || !partsInput || !barcodeInput || !runnerInput) continue;
 
-        const hiddenParts = JSON.parse(row.dataset.hidden || '[]');
+		const handle = handleInput.value.trim();
+		const title = titleInput.value.trim();
+		const partsCount = parseInt(partsInput.value.trim()) || 1;
+		const barcode = barcodeInput.value.trim();
+		const runner = runnerInput.value.trim();
 
-        for (let i = 1; i <= partsCount; i++) {
-          const vName = `${runner}-${i}`;
-          let vSKU = barcode;
-          if (!barcode.includes('-')) {
-            vSKU = `${barcode} ${vName}`;
-          }
-          const hidden = hiddenParts[i - 1] || {};
-          rows.push([
-            handle, title, '', '', '', '', '', '',
-            'Part Number', vName, '', '', '', '', '', '', '',
-            vSKU, barcode, kitName, partPrice,
-            ...HIDDEN_COLUMNS.map(k => {
+		const hiddenParts = JSON.parse(row.dataset.hidden || '[]');
+
+		const isFirstRunner = !seenRunners.has(runner);
+		if (isFirstRunner) seenRunners.add(runner);
+		
+		let bodyHTML = '', vendor = '', category = '', tags = '', published = '', type = '';
+		if (isFirstRunner) {
+		  try {
+			const metadata = JSON.parse(row.dataset.metadata || '{}');
+			bodyHTML = metadata.bodyHTML || '';
+			vendor = metadata.vendor || '';
+			category = metadata.category || '';
+			type = metadata.type || '';
+			tags = metadata.tags || '';
+			published = metadata.published || '';
+			image = metadata.image || '';
+			grade = metadata.grade || '';
+			note = metadata.note || '';
+			scale = metadata.scale || '';	
+			series = metadata.series || '';
+			reference = metadata.reference || '';
+			status = metadata.status || '';
+		  } catch (e) {
+			console.error('Metadata parse error:', e);
+		  }
+		}
+
+		for (let i = 1; i <= partsCount; i++) {
+		  const vName = `${runner}-${i}`;
+		  let vSKU = barcode;
+		  if (!barcode.includes('-')) {
+			vSKU = `${barcode} ${vName}`;
+		  }
+		  const hidden = hiddenParts[i - 1] || {};
+
+		  rows.push([
+			handle,
+			title,
+			(i === 1 && isFirstRunner) ? bodyHTML : '',
+			(i === 1 && isFirstRunner) ? vendor : '',
+			(i === 1 && isFirstRunner) ? category : '',
+			(i === 1 && isFirstRunner) ? type : '',
+			(i === 1 && isFirstRunner) ? tags : '',
+			(i === 1 && isFirstRunner) ? published : '',
+			'Part',
+			vName.toUpperCase(),
+			'',
+			'',
+			'',
+			'',
+			'',
+			'',
+			'',
+			vSKU,
+			...HIDDEN_COLUMNS.map(k => {
 			  if (k === "Variant Grams") return "10";
 			  if (k === "Variant Inventory Tracker") return "shopify";
 			  if (k === "Variant Inventory Policy") return "deny";
 			  if (k === "Variant Fulfillment Service") return "manual";
+			  if (k === "Variant Price") return partPrice;
 			  if (k === "Variant Requires Shipping") return "TRUE";
 			  if (k === "Variant Taxable") return "TRUE";
 			  return (hidden[k]?.trim?.() || "").trim();
-			})
-          ]);
-        }
-      }
+			}),
+			barcode,
+			(i === 1 && isFirstRunner) ? image : '',
+			(i === 1 && isFirstRunner) ? "1" : '',
+			'',
+			(i === 1 && isFirstRunner) ? "FALSE" : '',
+			'',
+			'',
+			'',
+			'',
+			'',
+			'',
+			'',
+			(i === 1 && isFirstRunner) ? "FALSE" : '',
+			'',
+			'',
+			'',
+			'',
+			'',
+			(i === 1 && isFirstRunner) ? grade : '',
+			(i === 1 && isFirstRunner) ? note : '',
+			(i === 1 && isFirstRunner) ? scale : '',
+			(i === 1 && isFirstRunner) ? series : '',
+			(i === 1 && isFirstRunner) ? reference : '',
+			'',
+			(i === 1 && isFirstRunner) ? "kg" : '',
+			'',
+			'',
+			(i === 1 && isFirstRunner) ? status : '',
+		  ]);
+		}
+	  }
 
-      const content = rows.map(r => r.map(f => `"${String(f).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+	  const content = rows.map(r => r.map(f => `"${String(f).replace(/"/g, '""')}"`).join(',')).join('\r\n');
 
-      const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = 'gundam_parts_clean_export.csv';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
+	  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+	  const link = document.createElement('a');
+	  link.href = URL.createObjectURL(blob);
+	  link.download = 'gundam_parts_clean_export.csv';
+	  document.body.appendChild(link);
+	  link.click();
+	  document.body.removeChild(link);
+	}
+
 
     addRow();
   </script>
