@@ -49,35 +49,15 @@
   </table>
 
   <script>
-    const tableBody = document.getElementById('tableBody');
-    const HIDDEN_COLUMNS = [
-      "Variant Grams", "Variant Inventory Tracker", "Variant Inventory Qty",
-      "Variant Inventory Policy", "Variant Fulfillment Service", "Variant Price", 
+    let firstRunnerMetadata = null;
+	const tableBody = document.getElementById('tableBody');
+	const HIDDEN_COLUMNS = [
+	  "Variant Grams", "Variant Inventory Tracker", "Variant Inventory Qty",
+	  "Variant Inventory Policy", "Variant Fulfillment Service", "Variant Price", 
 	  "Variant Compare At Price","Variant Requires Shipping", "Variant Taxable"
-    ];
+	];
 
-    function addRow(runnerName = '', handle = '', title = '', partsCount = 1, barcode = '', id = '') {
-      const count = tableBody.querySelectorAll('tr').length + 1;
-      const rowId = id || `id-${count}`;
-      const handleVal = handle || `runner-${count}`;
-      const titleVal = title || `Runner ${runnerName}`;
-      const barcodeVal = barcode || '';
-
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><input name="id" value="${rowId}" readonly /></td>
-        <td><input name="runnerName" value="${runnerName}" /></td>
-        <td><input name="Handle" value="${handleVal}" /></td>
-        <td><input name="title" value="${titleVal}" /></td>
-        <td><input name="parts" type="number" value="${partsCount}" min="1" /></td>
-        <td><button onclick="toggleParts(this)">Show</button></td>
-        <td><input name="barcode" value="${barcodeVal}" /></td>
-        <td><button onclick="removeRow(this)">Remove</button></td>
-      `;
-      tableBody.appendChild(tr);
-    } 
-	
-	function addRow(runnerName = '', handle = '', title = '', partsCount = 1, barcode = '', id = '') {
+	function addRow(runnerName = '', handle = '', title = '', partsCount = 1, barcode = '', id = '', variantPrices = [], metadata = null) {
 	  const count = tableBody.querySelectorAll('tr').length + 1;
 	  const rowId = id || `id-${count}`;
 	  let runnerVal = runnerName || `R${count}`;
@@ -90,15 +70,21 @@
 		titleVal = title || `Runner ${runnerVal}`;
 	  }
 
-	  // Remove spaces around hyphens only
 	  titleVal = titleVal.replace(/\s*-\s*/g, '-');
-
-	  // Always generate handle from title
 	  const handleVal = toHandle(titleVal);
 
-	  // Get Kit Barcode if not provided
 	  const globalBarcode = document.getElementById('globalBarcode')?.value.trim() || '';
 	  const barcodeVal = barcode || globalBarcode || runnerVal;
+
+	  // If no metadata explicitly provided and firstRunnerMetadata exists, use partial metadata (without note)
+	  if (!metadata && firstRunnerMetadata) {
+		metadata = {
+		  image: firstRunnerMetadata.image || '',
+		  grade: firstRunnerMetadata.grade || '',
+		  scale: firstRunnerMetadata.scale || '',
+		  series: firstRunnerMetadata.series || '',
+		};
+	  }
 
 	  const tr = document.createElement('tr');
 	  tr.innerHTML = `
@@ -113,7 +99,6 @@
 	  `;
 	  tableBody.appendChild(tr);
 
-	  // Add event listener to update title and handle on runnerName change
 	  const runnerInput = tr.querySelector('[name="runnerName"]');
 	  const titleInput = tr.querySelector('[name="title"]');
 	  const handleInput = tr.querySelector('[name="Handle"]');
@@ -122,138 +107,144 @@
 		let newRunner = runnerInput.value.trim() || `R${count}`;
 		const currentKitName = document.getElementById('globalKitName')?.value.trim() || 'Untitled';
 		let newTitle = `PART - ${currentKitName} - Runner ${newRunner.toUpperCase()}`;
-
 		newTitle = newTitle.replace(/\s*-\s*/g, '-');
 		titleInput.value = newTitle;
 		handleInput.value = toHandle(newTitle);
 	  });
+
+	  // Store variant prices and metadata in dataset
+	  tr.dataset.variantPrices = JSON.stringify(variantPrices);
+	  tr.dataset.metadata = JSON.stringify(metadata || {});
 	}
 
-    function removeRow(btn) {
-      const row = btn.closest('tr');
-      const next = row.nextElementSibling;
-      if (next && next.classList.contains('parts-view')) next.remove();
-      row.remove();
-    }
 
-    function toggleParts(btn) {
-      const row = btn.closest('tr');
-      const next = row.nextElementSibling;
-      if (next && next.classList.contains('parts-view')) {
-        next.remove();
-        btn.textContent = 'Show';
-        return;
-      }
+	function removeRow(btn) {
+	  const row = btn.closest('tr');
+	  const next = row.nextElementSibling;
+	  if (next && next.classList.contains('parts-view')) next.remove();
+	  row.remove();
+	}
 
-      const runnerName = row.querySelector('[name="runnerName"]').value;
-      const title = row.querySelector('[name="title"]').value;
-      const partsCount = parseInt(row.querySelector('[name="parts"]').value) || 1;
-      const barcode = row.querySelector('[name="barcode"]').value;
+	function toggleParts(btn) {
+	  const row = btn.closest('tr');
+	  const next = row.nextElementSibling;
+	  if (next && next.classList.contains('parts-view')) {
+		next.remove();
+		btn.textContent = 'Show';
+		return;
+	  }
 
-      const viewRow = document.createElement('tr');
-      viewRow.className = 'parts-view';
-      let html = `<td colspan="8"><table border="1" width="100%"><tr>
-        <th>#</th><th>Variant Name</th><th>Variant SKU</th><th>Runner</th><th>Title</th><th>Inventory Qty</th><th>Part Price</th></tr>`;
+	  const runnerName = row.querySelector('[name="runnerName"]').value;
+	  const title = row.querySelector('[name="title"]').value;
+	  const partsCount = parseInt(row.querySelector('[name="parts"]').value) || 1;
+	  const barcode = row.querySelector('[name="barcode"]').value;
 
-      for (let i = 1; i <= partsCount; i++) {
-        const variantName = `${runnerName}-${i}`;
-        let variantSKU = barcode;
-        if (!barcode.includes('-')) {
-          variantSKU = `${barcode} ${variantName}`;
-        }
-        html += `<tr>
-          <td>${i}</td>
-          <td>${variantName}</td>
-          <td>${variantSKU}</td>
-          <td>${runnerName}</td>
-          <td>${title}</td>
+	  const viewRow = document.createElement('tr');
+	  viewRow.className = 'parts-view';
+	  let html = `<td colspan="8"><table border="1" width="100%"><tr>
+		<th>#</th><th>Variant Name</th><th>Variant SKU</th><th>Runner</th><th>Title</th><th>Inventory Qty</th><th>Part Price</th></tr>`;
+
+	  const variantPrices = JSON.parse(row.dataset.variantPrices || '[]');
+
+	  for (let i = 1; i <= partsCount; i++) {
+		const variantName = `${runnerName}-${i}`;
+		let variantSKU = barcode;
+		if (!barcode.includes('-')) {
+		  variantSKU = `${barcode} ${variantName}`;
+		}
+		const priceVal = variantPrices[i - 1] || '';
+
+		html += `<tr>
+		  <td>${i}</td>
+		  <td>${variantName}</td>
+		  <td>${variantSKU}</td>
+		  <td>${runnerName}</td>
+		  <td>${title}</td>
 		  <td><input name="inventoryQty-${variantName}" type="number" value="1" min="0" /></td>
-		  <td><input name="partPrice-${variantName}" type="number" value="" step="0.01" min="0" /></td>
-        </tr>`;
-      }
+		  <td><input name="partPrice-${variantName}" type="number" value="${priceVal}" step="0.01" min="0" /></td>
+		</tr>`;
+	  }
 
-      html += `</table></td>`;
-      viewRow.innerHTML = html;
-      row.after(viewRow);
-      btn.textContent = 'Hide';
-    }
-	
-	function toHandle(str) {
-		return str.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
+	  html += `</table></td>`;
+	  viewRow.innerHTML = html;
+	  row.after(viewRow);
+	  btn.textContent = 'Hide';
 	}
 
-    function importCSV(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = e => parseCSV(e.target.result);
-      reader.readAsText(file);
-    }
+	function toHandle(str) {
+	  return str.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
+	}
 
-    function parseCSV(text) {
-      tableBody.innerHTML = '';
+	function importCSV(event) {
+	  const file = event.target.files[0];
+	  if (!file) return;
+	  const reader = new FileReader();
+	  reader.onload = e => parseCSV(e.target.result);
+	  reader.readAsText(file);
+	}
 
-      const result = Papa.parse(text, {
-        header: true,
-        skipEmptyLines: true,
-      });
+	function parseCSV(text) {
+	  tableBody.innerHTML = '';
 
-      const data = result.data;
-      const groups = {};
-	  const runnerMetadata = {}; // Store first occurrence info
+	  const result = Papa.parse(text, {
+		header: true,
+		skipEmptyLines: true,
+	  });
+
+	  const data = result.data;
+	  const groups = {};
 
 	  data.forEach((row, i) => {
 		const handle = row['Handle'] || `handle-${i}`;
-		if (!groups[handle]) {
-		  groups[handle] = [];
-		  runnerMetadata[handle] = {
-		  bodyHTML: row["Body (HTML)"] || 'not read',
-		  vendor: row["Vendor"] || '',
-		  category: row["Product Category"] || '',
-		  type: row["Type"] || '',
-		  tags: row["Tags"] || '',
-		  published: row["Published"] || '',
-		  image: row["Image Src"] || '',
-		  grade: row["Grade (product.metafields.custom.grade)"] || '',
-		  note: row["Note (product.metafields.custom.note)"] || '',
-		  scale: row["Scale (product.metafields.custom.scale)"] || '',
-		  series: row["Series (product.metafields.custom.series)"] || '',
-		  reference: row["SupplierReference (product.metafields.custom.supplierreference)"] || '',
-		  status: row["Status"] || '',
+		if (!groups[handle]) groups[handle] = [];
+		groups[handle].push(row);
+	  });
+
+	  let count = 0;
+	  firstRunnerMetadata = null; // Reset
+
+	  for (const handle in groups) {
+		const rows = groups[handle];
+		const main = rows[0];
+
+		const title = main['Title'] || handle;
+		const barcode = main['Variant Barcode']?.replace(/'/g, '') || '';
+		const runnerName = main['Runner Name'] || handle.split('-').slice(-1)[0];
+		const partsCount = rows.length;
+
+		// Extract variant prices
+		const variantPrices = rows.map(r => r['Variant Price'] || '');
+
+		// Capture metadata
+		const metadata = {
+		  bodyHTML: main["Body(HTML)"] || main["Body (HTML)"] || '',
+		  vendor: main["Vendor"] || '',
+		  category: main["Product Category"] || '',
+		  type: main["Type"] || '',
+		  tags: main["Tags"] || '',
+		  published: main["Published"] || '',
+		  image: main["Image Src"] || '',
+		  grade: main["Grade (product.metafields.custom.grade)"] || '',
+		  note: main["Note (product.metafields.custom.note)"] || '',
+		  scale: main["Scale (product.metafields.custom.scale)"] || '',
+		  series: main["Series (product.metafields.custom.series)"] || '',
+		  reference: main["SupplierReference (product.metafields.custom.supplierreference)"] || '',
+		  status: main["Status"] || '',
 		};
+
+		// Save first runner metadata, but exclude "note"
+		if (!firstRunnerMetadata) {
+		  firstRunnerMetadata = {
+			image: metadata.image,
+			grade: metadata.grade,
+			scale: metadata.scale,
+			series: metadata.series,
+		  };
+		}
+
+		addRow(runnerName, handle, title, partsCount, barcode, `id-${++count}`, variantPrices, metadata);
 	  }
-	groups[handle].push(row);
-	});
-      let count = 0;
-      for (const handle in groups) {
-        const rows = groups[handle];
-        const main = rows[0];
-        const title = main['Title'] || handle;
-        const barcode = main['Variant Barcode'].replace(/'/g, '') || '';
-        const runnerName = main['Runner Name'] || handle.split('-').slice(-1)[0];
-        const partsCount = rows.length;
-
-        addRow(runnerName, handle, title, partsCount, barcode, `id-${++count}`);
-        const lastRow = tableBody.lastElementChild;
-        lastRow.dataset.parts = JSON.stringify(rows.slice(1));
-        lastRow.dataset.handle = handle;
-        lastRow.dataset.title = title;
-        lastRow.dataset.barcode = barcode;
-		lastRow.dataset.metadata = JSON.stringify(runnerMetadata[handle]);
-		console.log('Metadata for runner', handle, runnerMetadata[handle]);
-		console.log("Headers detected:", Object.keys(data[0]));
-
-        lastRow.dataset.hidden = JSON.stringify(
-		  rows.map(r => {
-			const extra = {};
-			for (const col of HIDDEN_COLUMNS) {
-			  extra[col] = col === "Variant Grams" ? '10' : (r[col] || '');
-			}
-			return extra;
-		  })
-		);
-      }
-    }
+	}
 
     function downloadCSV() {
 	  const kitName = document.getElementById('globalKitName')?.value.trim() || '';
