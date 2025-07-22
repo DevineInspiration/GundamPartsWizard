@@ -107,9 +107,9 @@
 		let newRunner = runnerInput.value.trim() || `R${count}`;
 		const currentKitName = document.getElementById('globalKitName')?.value.trim() || 'Untitled';
 		let newTitle = `PART - ${currentKitName} - Runner ${newRunner.toUpperCase()}`;
-		newTitle = newTitle.replace(/\s*-\s*/g, '-');
+		handleTitle = newTitle.replace(/\s*-\s*/g, '-');
 		titleInput.value = newTitle;
-		handleInput.value = toHandle(newTitle);
+		handleInput.value = toHandle(handleTitle);
 	  });
 
 	  // Store variant prices and metadata in dataset
@@ -225,6 +225,7 @@
 		  published: main["Published"] || '',
 		  image: main["Image Src"] || '',
 		  grade: main["Grade (product.metafields.custom.grade)"] || '',
+		  model_kit: document.getElementById('globalKitName')?.value.trim() || main["Model Kit (product.metafields.custom.model_kit)"] || '',
 		  note: main["Note (product.metafields.custom.note)"] || '',
 		  scale: main["Scale (product.metafields.custom.scale)"] || '',
 		  series: main["Series (product.metafields.custom.series)"] || '',
@@ -251,21 +252,29 @@
 	  const partPrice = document.getElementById('globalPartPrice')?.value.trim() || '';
 
 	  const rows = [[
-		'Handle', 'Title', 'Body(HTML)', 'Vendor', 'Product Category', 'Type', 'Tags', 'Published',
-		'Option1 Name', 'Option1 Value', 'Option1 Linked To',
-		'Option2 Name', 'Option2 Value', 'Option2 Linked To',
-		'Option3 Name', 'Option3 Value', 'Option3 Linked To',
-		'Variant SKU', 
-		...HIDDEN_COLUMNS,'Variant Barcode','Image Src','Image Position','Image Alt Text',
-		'Gift Card','SEO Title','SEO Description','Google Shopping / Google Product Category',
-		'Google Shopping / Gender','Google Shopping / Age Group','Google Shopping / MPN',
-		'Google Shopping / Condition','Google Shopping / Custom Product','Google Shopping / Custom Label 0',
-		'Google Shopping / Custom Label 1','Google Shopping / Custom Label 2','Google Shopping / Custom Label 3',
-		'Google Shopping / Custom Label 4','Grade (product.metafields.custom.grade)','Note (product.metafields.custom.note)',
-		'Scale (product.metafields.custom.scale)','Series (product.metafields.custom.series)',
-		'SupplierReference (product.metafields.custom.supplierreference)','Variant Image',
-		'Variant Weight Unit','Variant Tax Code','Cost per item','Status',
-	  ]];
+	  'Handle', 'Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tags', 'Published',
+	  'Option1 Name', 'Option1 Value', 'Option1 Linked To',
+	  'Option2 Name', 'Option2 Value', 'Option2 Linked To',
+	  'Option3 Name', 'Option3 Value', 'Option3 Linked To',
+	  'Variant SKU', ...HIDDEN_COLUMNS,
+	  'Variant Barcode', 'Image Src', 'Image Position', 'Image Alt Text', 'Gift Card',
+	  'SEO Title', 'SEO Description', 'Google Shopping / Google Product Category',
+	  'Google Shopping / Gender', 'Google Shopping / Age Group', 'Google Shopping / MPN',
+	  'Google Shopping / Condition', 'Google Shopping / Custom Product',
+	  'Google Shopping / Custom Label 0', 'Google Shopping / Custom Label 1',
+	  'Google Shopping / Custom Label 2', 'Google Shopping / Custom Label 3',
+	  'Google Shopping / Custom Label 4', 'Grade (product.metafields.custom.grade)',
+	  'Model Kit (product.metafields.custom.model_kit)',
+	  'Note (product.metafields.custom.note)', 'Scale (product.metafields.custom.scale)',
+	  'Series (product.metafields.custom.series)',
+	  'SupplierReference (product.metafields.custom.supplierreference)',
+	  'Google: Custom Product (product.metafields.mm-google-shopping.custom_product)',
+	  'Complementary products (product.metafields.shopify--discovery--product_recommendation.complementary_products)',
+	  'Related products (product.metafields.shopify--discovery--product_recommendation.related_products)',
+	  'Related products settings (product.metafields.shopify--discovery--product_recommendation.related_products_display)',
+	  'Search product boosts (product.metafields.shopify--discovery--product_search_boost.queries)',
+	  'Variant Image', 'Variant Weight Unit', 'Variant Tax Code', 'Cost per item', 'Status'
+	]];
 
 	  const seenRunners = new Set();
 
@@ -292,25 +301,26 @@
 		if (isFirstRunner) seenRunners.add(runner);
 		
 		let bodyHTML = '', vendor = '', category = '', tags = '', published = '', type = '';
-		if (isFirstRunner) {
-		  try {
-			const metadata = JSON.parse(row.dataset.metadata || '{}');
-			bodyHTML = metadata.bodyHTML || '';
-			vendor = metadata.vendor || '';
-			category = metadata.category || '';
-			type = metadata.type || '';
-			tags = metadata.tags || '';
-			published = metadata.published || '';
-			image = metadata.image || '';
-			grade = metadata.grade || '';
-			note = metadata.note || '';
-			scale = metadata.scale || '';	
-			series = metadata.series || '';
-			reference = metadata.reference || '';
-			status = metadata.status || '';
-		  } catch (e) {
-			console.error('Metadata parse error:', e);
-		  }
+		let image = '', grade = '', note = '', scale = '', series = '', reference = '', status = 'draft';
+
+		try {
+		  const metadata = JSON.parse(row.dataset.metadata || '{}');
+		  bodyHTML = metadata.bodyHTML || '';
+		  vendor = metadata.vendor || '';
+		  category = metadata.category || '';
+		  type = metadata.type || '';
+		  tags = metadata.tags || '';
+		  published = metadata.published || '';
+		  image = metadata.image || '';
+		  grade = metadata.grade || '';
+		  model_kit = metadata.model_kit || ''; 
+		  note = metadata.note || '';
+		  scale = metadata.scale || '';	
+		  series = metadata.series || '';
+		  reference = metadata.reference || '';
+		  status = metadata.status || '';
+		} catch (e) {
+		  console.error('Metadata parse error:', e);
 		}
 
 		for (let i = 1; i <= partsCount; i++) {
@@ -369,15 +379,21 @@
 			'',
 			'',
 			(i === 1 && isFirstRunner) ? grade : '',
+			(i === 1 && isFirstRunner) ? model_kit : '',
 			(i === 1 && isFirstRunner) ? note : '',
 			(i === 1 && isFirstRunner) ? scale : '',
 			(i === 1 && isFirstRunner) ? series : '',
 			(i === 1 && isFirstRunner) ? reference : '',
 			'',
+			'',
+			'',
+			'',
+			'',
+			'',
 			(i === 1 && isFirstRunner) ? "kg" : '',
 			'',
 			'',
-			(i === 1 && isFirstRunner) ? status : '',
+			(i === 1 && isFirstRunner) ? status : 'draft',
 		  ]);
 		}
 	  }
