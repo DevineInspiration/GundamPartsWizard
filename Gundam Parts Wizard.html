@@ -79,10 +79,16 @@
 	  // If no metadata explicitly provided and firstRunnerMetadata exists, use partial metadata (without note)
 	  if (!metadata && firstRunnerMetadata) {
 		metadata = {
-		  image: firstRunnerMetadata.image || '',
-		  grade: firstRunnerMetadata.grade || '',
-		  scale: firstRunnerMetadata.scale || '',
-		  series: firstRunnerMetadata.series || '',
+			image: firstRunnerMetadata.image || '',
+			grade: firstRunnerMetadata.grade || '',
+			scale: firstRunnerMetadata.scale || '',
+			series: firstRunnerMetadata.series || '',
+			model_kit: firstRunnerMetadata.model_kit || '',
+			vendor: firstRunnerMetadata.vendor || '',
+			category: firstRunnerMetadata.category || '',
+			type: firstRunnerMetadata.type || '',
+			tags: firstRunnerMetadata.tags || '',
+			published: firstRunnerMetadata.published || '',
 		};
 	  }
 
@@ -225,21 +231,27 @@
 		  published: main["Published"] || '',
 		  image: main["Image Src"] || '',
 		  grade: main["Grade (product.metafields.custom.grade)"] || '',
-		  model_kit: document.getElementById('globalKitName')?.value.trim() || main["Model Kit (product.metafields.custom.model_kit)"] || '',
+		  model_kit: main["Model Kit (product.metafields.custom.model_kit)"] || '',
 		  note: main["Note (product.metafields.custom.note)"] || '',
 		  scale: main["Scale (product.metafields.custom.scale)"] || '',
 		  series: main["Series (product.metafields.custom.series)"] || '',
 		  reference: main["SupplierReference (product.metafields.custom.supplierreference)"] || '',
-		  status: main["Status"] || '',
+		  status: main["Status"] || 'draft',
 		};
 
 		// Save first runner metadata, but exclude "note"
 		if (!firstRunnerMetadata) {
 		  firstRunnerMetadata = {
+			vendor: metadata.vendor,
+			category: metadata.category,
+			type: metadata.type,
+			tags: metadata.tags,
+			published: metadata.published,
 			image: metadata.image,
 			grade: metadata.grade,
 			scale: metadata.scale,
 			series: metadata.series,
+			model_kit: metadata.model_kit,
 		  };
 		}
 
@@ -301,7 +313,7 @@
 		if (isFirstRunner) seenRunners.add(runner);
 		
 		let bodyHTML = '', vendor = '', category = '', tags = '', published = '', type = '';
-		let image = '', grade = '', note = '', scale = '', series = '', reference = '', status = 'draft';
+		let image = '', grade = '', model_kit = '', note = '', scale = '', series = '', reference = '', status = 'draft';
 
 		try {
 		  const metadata = JSON.parse(row.dataset.metadata || '{}');
@@ -393,7 +405,7 @@
 			(i === 1 && isFirstRunner) ? "kg" : '',
 			'',
 			'',
-			(i === 1 && isFirstRunner) ? status : 'draft',
+			(i === 1 && isFirstRunner) ? "draft" : '',
 		  ]);
 		}
 	  }
