@@ -3,16 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Gundam Parts Wizard - Clean Export (V3.7)</title>
+  <title>Gundam Parts Wizard - Clean Export (V3.8)</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-    th, td { border: 1px solid #aaa; padding: 8px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; table-layout: fixed; }
+    th, td { border: 1px solid #aaa; padding: 8px; box-sizing: border-box; }
     input, select { width: 100%; box-sizing: border-box; }
     input[readonly] { background-color: #eee; color: #555; border: 1px solid #ccc; }
     button { margin-top: 10px; }
     .parts-view td { background: #fafafa; }
     .note-input { min-width: 180px; }
+
+    /* Resizable table container */
+    .table-wrapper { resize: both; overflow: auto; max-width: 100%; border: 1px solid #ccc; padding: 6px; border-radius: 8px; }
+
+    /* Column resizer handle */
+    th { position: relative; }
+    .col-resizer { position: absolute; right: 0; top: 0; height: 100%; width: 6px; cursor: col-resize; user-select: none; }
+    .col-resizer:hover { background: rgba(0,0,0,0.05); }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 </head>
@@ -33,22 +41,24 @@
   <button onclick="addRow()">Add Row</button>
   <button onclick="downloadCSV()">Download CSV</button>
 
-  <table id="inputTable">
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Runner Name</th>
-        <th>Handle</th>
-        <th>Title</th>
-        <th>Parts</th>
-        <th>Parts View</th>
-        <th>Barcode</th>
-        <th>Note</th>
-        <th>Remove</th>
-      </tr>
-    </thead>
-    <tbody id="tableBody"></tbody>
-  </table>
+  <div id="inputTableWrapper" class="table-wrapper">
+    <table id="inputTable">
+      <thead>
+        <tr>
+          <th style="width: 80px;">ID</th>
+          <th style="width: 140px;">Runner Name</th>
+          <th style="width: 180px;">Handle</th>
+          <th style="width: 260px;">Title</th>
+          <th style="width: 80px;">Parts</th>
+          <th style="width: 100px;">Parts View</th>
+          <th style="width: 160px;">Barcode</th>
+          <th style="width: 220px;">Note</th>
+          <th style="width: 100px;">Remove</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
 
   <script>
     let firstRunnerMetadata = null;
@@ -58,6 +68,48 @@
 	  "Variant Inventory Policy", "Variant Fulfillment Service", "Variant Price", 
 	  "Variant Compare At Price","Variant Requires Shipping", "Variant Taxable"
 	];
+
+    // === Column resizing ===
+    function enableColumnResizing(table) {
+      if (!table) return;
+      const ths = table.querySelectorAll('thead th');
+      const getBodyRows = () => table.querySelectorAll('tbody tr');
+      ths.forEach((th, index) => {
+        if (th.querySelector('.col-resizer')) return;
+        const resizer = document.createElement('div');
+        resizer.className = 'col-resizer';
+        th.appendChild(resizer);
+        let startX, startWidth;
+        const onMouseDown = (e) => {
+          startX = e.clientX;
+          startWidth = th.getBoundingClientRect().width;
+          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('mouseup', onMouseUp);
+          e.preventDefault();
+        };
+        const onMouseMove = (e) => {
+          const dx = e.clientX - startX;
+          const newWidth = Math.max(60, Math.round(startWidth + dx));
+          th.style.width = newWidth + 'px';
+          th.style.minWidth = newWidth + 'px';
+          getBodyRows().forEach(row => {
+            const cell = row.children[index];
+            if (cell) {
+              cell.style.width = newWidth + 'px';
+              cell.style.minWidth = newWidth + 'px';
+            }
+          });
+        };
+        const onMouseUp = () => {
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        };
+        resizer.addEventListener('mousedown', onMouseDown);
+      });
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      enableColumnResizing(document.getElementById('inputTable'));
+    });
 
 	function addRow(runnerName = '', handle = '', title = '', partsCount = 1, barcode = '', id = '', variantPrices = [], metadata = null) {
 	  const count = tableBody.querySelectorAll('tr').length + 1;
@@ -248,7 +300,7 @@
 		  image: main["Image Src"] || '',
 		  grade: main["Grade (product.metafields.custom.grade)"] || '',
 		  model_kit: main["Model Kit (product.metafields.custom.model_kit)"] || '',
-		  note: main["Note (product.metafields.custom.note)"] || '',
+		  note: main["Note (product.metafields.custom.note)"] || 'N/A',
 		  scale: main["Scale (product.metafields.custom.scale)"] || '',
 		  series: main["Series (product.metafields.custom.series)"] || '',
 		  reference: main["SupplierReference (product.metafields.custom.supplierreference)"] || '',
@@ -346,7 +398,7 @@
 		  grade = metadata.grade || '';
 		  model_kit = metadata.model_kit || ''; 
 		  // Prefer current input over stored metadata
-		  note = noteFromInput || metadata.note || 'N/A';
+		  note = noteFromInput || metadata.note || '';
 		  scale = metadata.scale || ''; 	
 		  series = metadata.series || '';
 		  reference = metadata.reference || '';
