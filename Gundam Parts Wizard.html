@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Gundam Parts Wizard - Clean Export</title>
+  <title>Gundam Parts Wizard - Clean Export (V3.7)</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     table { border-collapse: collapse; width: 100%; margin-top: 10px; }
@@ -12,11 +12,12 @@
     input[readonly] { background-color: #eee; color: #555; border: 1px solid #ccc; }
     button { margin-top: 10px; }
     .parts-view td { background: #fafafa; }
+    .note-input { min-width: 180px; }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 </head>
 <body>
-  <h1>Gundam Parts Listing Wizard </h1>
+  <h1>Gundam Parts Listing Wizard</h1>
 
   <input type="file" id="csvFileInput" accept=".csv" onchange="importCSV(event)" />
   
@@ -42,6 +43,7 @@
         <th>Parts</th>
         <th>Parts View</th>
         <th>Barcode</th>
+        <th>Note</th>
         <th>Remove</th>
       </tr>
     </thead>
@@ -84,15 +86,18 @@
 			scale: firstRunnerMetadata.scale || '',
 			series: firstRunnerMetadata.series || '',
 			model_kit: firstRunnerMetadata.model_kit || '',
+			bodyHTML: firstRunnerMetadata.bodyHTML || '',
 			vendor: firstRunnerMetadata.vendor || '',
 			category: firstRunnerMetadata.category || '',
 			type: firstRunnerMetadata.type || '',
 			tags: firstRunnerMetadata.tags || '',
 			published: firstRunnerMetadata.published || '',
+			note: ''
 		};
 	  }
 
 	  const tr = document.createElement('tr');
+	  const noteVal = (metadata && metadata.note) ? metadata.note : '';
 	  tr.innerHTML = `
 		<td><input name="id" value="${rowId}" readonly /></td>
 		<td><input name="runnerName" value="${runnerVal}" /></td>
@@ -101,6 +106,7 @@
 		<td><input name="parts" type="number" value="${partsCount}" min="1" /></td>
 		<td><button onclick="toggleParts(this)">Show</button></td>
 		<td><input name="barcode" value="${barcodeVal}" /></td>
+		<td><input class="note-input" name="note" placeholder="Optional stock note for this runner" value="${noteVal.replace(/"/g, '&quot;')}" /></td>
 		<td><button onclick="removeRow(this)">Remove</button></td>
 	  `;
 	  tableBody.appendChild(tr);
@@ -108,6 +114,7 @@
 	  const runnerInput = tr.querySelector('[name="runnerName"]');
 	  const titleInput = tr.querySelector('[name="title"]');
 	  const handleInput = tr.querySelector('[name="Handle"]');
+	  const noteInput = tr.querySelector('[name="note"]');
 
 	  runnerInput.addEventListener('input', () => {
 		let newRunner = runnerInput.value.trim() || `R${count}`;
@@ -121,6 +128,15 @@
 	  // Store variant prices and metadata in dataset
 	  tr.dataset.variantPrices = JSON.stringify(variantPrices);
 	  tr.dataset.metadata = JSON.stringify(metadata || {});
+
+	  // Keep dataset note in sync if user edits the Note field
+	  noteInput.addEventListener('input', () => {
+		try {
+		  const m = JSON.parse(tr.dataset.metadata || '{}');
+		  m.note = noteInput.value;
+		  tr.dataset.metadata = JSON.stringify(m);
+		} catch (e) {}
+	  });
 	}
 
 
@@ -147,7 +163,7 @@
 
 	  const viewRow = document.createElement('tr');
 	  viewRow.className = 'parts-view';
-	  let html = `<td colspan="8"><table border="1" width="100%"><tr>
+	  let html = `<td colspan="9"><table border="1" width="100%"><tr>
 		<th>#</th><th>Variant Name</th><th>Variant SKU</th><th>Runner</th><th>Title</th><th>Inventory Qty</th><th>Part Price</th></tr>`;
 
 	  const variantPrices = JSON.parse(row.dataset.variantPrices || '[]');
@@ -242,6 +258,7 @@
 		// Save first runner metadata, but exclude "note"
 		if (!firstRunnerMetadata) {
 		  firstRunnerMetadata = {
+		    bodyHTML: metadata.bodyHTML,
 			vendor: metadata.vendor,
 			category: metadata.category,
 			type: metadata.type,
@@ -298,6 +315,7 @@
 		const partsInput = row.querySelector('[name="parts"]');
 		const barcodeInput = row.querySelector('[name="barcode"]');
 		const runnerInput = row.querySelector('[name="runnerName"]');
+		const noteInput = row.querySelector('[name="note"]');
 
 		if (!handleInput || !titleInput || !partsInput || !barcodeInput || !runnerInput) continue;
 
@@ -306,6 +324,7 @@
 		const partsCount = parseInt(partsInput.value.trim()) || 1;
 		const barcode = barcodeInput.value.trim();
 		const runner = runnerInput.value.trim();
+		const noteFromInput = (noteInput?.value || '').trim();
 
 		const hiddenParts = JSON.parse(row.dataset.hidden || '[]');
 
@@ -326,13 +345,15 @@
 		  image = metadata.image || '';
 		  grade = metadata.grade || '';
 		  model_kit = metadata.model_kit || ''; 
-		  note = metadata.note || '';
-		  scale = metadata.scale || '';	
+		  // Prefer current input over stored metadata
+		  note = noteFromInput || metadata.note || 'N/A';
+		  scale = metadata.scale || ''; 	
 		  series = metadata.series || '';
 		  reference = metadata.reference || '';
 		  status = metadata.status || '';
 		} catch (e) {
 		  console.error('Metadata parse error:', e);
+		  note = noteFromInput; // still keep the user's input if metadata broken
 		}
 
 		for (let i = 1; i <= partsCount; i++) {
