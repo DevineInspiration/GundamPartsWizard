@@ -118,23 +118,23 @@
 	  const count = tableBody.querySelectorAll('tr').length + 1;
 	  const rowId = id || `id-${count}`;
 	  // Either load existing runner names or generate a placeholder "R[number]"
-	  let runnerVal = runnerName || `R${count}`;
+	  let runnerName = runnerName || `R${count}`;
 
 	  const globalTitle = document.getElementById('globalKitName')?.value.trim() || 'Untitled';
-	  let titleVal;
+	  let listingTitle;
 	  
 	  // If a runner does not have a Title, generate one using the Kit Name (entered by the user in the global input fields) & the Runner Name
 	  if (!runnerName) {
-		titleVal = `PART - ${globalTitle} - Runner ${runnerVal}`;
+		listingTitle = `PART - ${globalTitle} - Runner ${runnerName}`;
 	  } else {
-		titleVal = title || `Runner ${runnerVal}`;
+		listingTitle = title || `Runner ${runnerName}`;
 	  }
 	  // This function is used to generate the URL handle for each of the runner listings (sets to lowercase, removes spaces, replaces with hypens, etc)
-	  const handleVal = toHandle(titleVal);
+	  const listingHandle = toHandle(listingTitle);
 	  
 	  // Makes sure the barcode is receieved, by either the global input field, the inputted csv, or fallback on the Runner Name (not ideal)
 	  const globalBarcode = document.getElementById('globalBarcode')?.value.trim() || '';
-	  const barcodeVal = barcode || globalBarcode || runnerVal;
+	  const partBarcode = barcode || globalBarcode || runnerName;
 
 	  // If no metadata explicitly provided and firstRunnerMetadata exists, use partial metadata (without note)
 	  if (!metadata && firstRunnerMetadata) {
@@ -160,12 +160,12 @@
 	  // Generate the input fields allowing the user to add information for each of the individual runners
 	  tr.innerHTML = `
 		<td><input name="id" value="${rowId}" readonly /></td>
-		<td><input name="runnerName" value="${runnerVal}" /></td>
-		<td><input name="Handle" value="${handleVal}" /></td>
-		<td><input name="title" value="${titleVal}" /></td>
+		<td><input name="runnerName" value="${runnerName}" /></td>
+		<td><input name="Handle" value="${listingHandle}" /></td>
+		<td><input name="title" value="${listingTitle}" /></td>
 		<td><input name="parts" type="number" value="${partsCount}" min="1" /></td>
 		<td><button onclick="toggleParts(this)">Show</button></td>
-		<td><input name="barcode" value="${barcodeVal}" /></td>
+		<td><input name="barcode" value="${partBarcode}" /></td>
 		<td><input class="note-input" name="note" placeholder="Optional stock note for this runner" value="${noteVal.replace(/"/g, '&quot;')}" /></td>
 		<td><button onclick="removeRow(this)">Remove</button></td>
 	  `;
@@ -260,7 +260,8 @@
 	  .toLowerCase()			//Sets kit name to full lowercase	
 	  .trim()					//Removes any following spaces
 	  .replace(/[^\w\s-]/g, '')	//Removes punctiuation
-	  .replace(/\s*-\s*/g, '-');//Removes any spaces before or after a hyphen
+	  .replace(/\s*-\s*/g, '-') //Removes any spaces before or after a hyphen
+	  .replace(/\s+/g, '-');	//Replaces any remaining spaces with a hyphen
 	}
 	
 	//This function loads the users input csv into the next function for parsing of the information
@@ -268,23 +269,24 @@
 	  const file = event.target.files[0];
 	  if (!file) return;
 	  const reader = new FileReader();
-	  reader.onload = e => parseCSV(e.target.result);
+	  reader.onload = e => parseCSV(e.target.result); //(event.target.result)
 	  reader.readAsText(file);
 	}
 
 	function parseCSV(text) {
 	  tableBody.innerHTML = '';
 
-	  const result = Papa.parse(text, {
+	  const papaResult = Papa.parse(text, {
 		header: true,
 		skipEmptyLines: true,
 	  });
 
-	  const data = result.data;
+	  const csvData = papaResult.data;
+	  
+	  // Groups is used to "group" all parts by runner (by the handle)
 	  const groups = {};
-
 	  data.forEach((row, i) => {
-		// This reads the handle for the next Runner, if this cannot be found generate one, this case shouldnt ever happen
+		// Iterate through and for each new handle, add the parts to an JS object
 		const handle = row['Handle'] || `handle-${i}`;
 		if (!groups[handle]) groups[handle] = [];
 		groups[handle].push(row);
@@ -395,8 +397,6 @@
 		const runner = runnerInput.value.trim();
 		const noteFromInput = (noteInput?.value || 'N/A').trim();
 
-		const hiddenParts = JSON.parse(row.dataset.hidden || '[]');
-
 		const isFirstRunner = !seenRunners.has(runner);
 		if (isFirstRunner) seenRunners.add(runner);
 		
@@ -431,7 +431,6 @@
 		  if (!barcode.includes('-')) {
 			vSKU = `${barcode} ${vName}`;
 		  }
-		  const hidden = hiddenParts[i - 1] || {};
 
 		  rows.push([
 			handle,
