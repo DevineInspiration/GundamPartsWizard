@@ -114,17 +114,17 @@
     });
 	
 	// This function is resposible for handling the extra csv entries when the user adds more runners (rows) 
-	function addRow(runnerName = '', handle = '', title = '', partsCount = 1, barcode = '', id = '', variantPrices = [], metadata = null) {
+	function addRow(runnerPreName = '', handle = '', title = '', partsCount = 1, barcode = '', id = '', variantPrices = [], metadata = null) {
 	  const count = tableBody.querySelectorAll('tr').length + 1;
 	  const rowId = id || `id-${count}`;
 	  // Either load existing runner names or generate a placeholder "R[number]"
-	  let runnerName = runnerName || `R${count}`;
+	  let runnerName = runnerPreName || `R${count}`;
 
 	  const globalTitle = document.getElementById('globalKitName')?.value.trim() || 'Untitled';
 	  let listingTitle;
 	  
 	  // If a runner does not have a Title, generate one using the Kit Name (entered by the user in the global input fields) & the Runner Name
-	  if (!runnerName) {
+	  if (!runnerPreName) {
 		listingTitle = `PART - ${globalTitle} - Runner ${runnerName}`;
 	  } else {
 		listingTitle = title || `Runner ${runnerName}`;
@@ -285,7 +285,7 @@
 	  
 	  // Groups is used to "group" all parts by runner (by the handle)
 	  const groups = {};
-	  data.forEach((row, i) => {
+	  csvData.forEach((row, i) => {
 		// Iterate through and for each new handle, add the parts to an JS object
 		const handle = row['Handle'] || `handle-${i}`;
 		if (!groups[handle]) groups[handle] = [];
@@ -459,7 +459,6 @@
 			  if (k === "Variant Price") return partPrice;
 			  if (k === "Variant Requires Shipping") return "TRUE";
 			  if (k === "Variant Taxable") return "TRUE";
-			  return (hidden[k]?.trim?.() || "").trim();
 			}),
 			barcode,
 			(i === 1 && isFirstRunner) ? image : '',
