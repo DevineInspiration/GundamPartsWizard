@@ -61,6 +61,8 @@
   </div>
 
   <script>
+	//	Initialise the data structure for the first Runners metadata, this will be used for reading in information from imported csv
+	
     let firstRunnerMetadata = null;
 	const tableBody = document.getElementById('tableBody');
 	const HIDDEN_COLUMNS = [
@@ -69,7 +71,7 @@
 	  "Variant Compare At Price","Variant Requires Shipping", "Variant Taxable"
 	];
 
-    // === Column resizing ===
+    //	Enables column resizing
     function enableColumnResizing(table) {
       if (!table) return;
       const ths = table.querySelectorAll('thead th');
@@ -110,23 +112,27 @@
     document.addEventListener('DOMContentLoaded', () => {
       enableColumnResizing(document.getElementById('inputTable'));
     });
-
+	
+	// This function is resposible for handling the extra csv entries when the user adds more runners (rows) 
 	function addRow(runnerName = '', handle = '', title = '', partsCount = 1, barcode = '', id = '', variantPrices = [], metadata = null) {
 	  const count = tableBody.querySelectorAll('tr').length + 1;
 	  const rowId = id || `id-${count}`;
+	  // Either load existing runner names or generate a placeholder "R[number]"
 	  let runnerVal = runnerName || `R${count}`;
 
 	  const globalTitle = document.getElementById('globalKitName')?.value.trim() || 'Untitled';
 	  let titleVal;
+	  
+	  // If a runner does not have a Title, generate one using the Kit Name (entered by the user in the global input fields) & the Runner Name
 	  if (!runnerName) {
 		titleVal = `PART - ${globalTitle} - Runner ${runnerVal}`;
 	  } else {
 		titleVal = title || `Runner ${runnerVal}`;
 	  }
-
-	  titleVal = titleVal.replace(/\s*-\s*/g, '-');
+	  // This function is used to generate the URL handle for each of the runner listings (sets to lowercase, removes spaces, replaces with hypens, etc)
 	  const handleVal = toHandle(titleVal);
-
+	  
+	  // Makes sure the barcode is receieved, by either the global input field, the inputted csv, or fallback on the Runner Name (not ideal)
 	  const globalBarcode = document.getElementById('globalBarcode')?.value.trim() || '';
 	  const barcodeVal = barcode || globalBarcode || runnerVal;
 
@@ -150,6 +156,8 @@
 
 	  const tr = document.createElement('tr');
 	  const noteVal = (metadata && metadata.note) ? metadata.note : '';
+	  
+	  // Generate the input fields allowing the user to add information for each of the individual runners
 	  tr.innerHTML = `
 		<td><input name="id" value="${rowId}" readonly /></td>
 		<td><input name="runnerName" value="${runnerVal}" /></td>
@@ -191,7 +199,7 @@
 	  });
 	}
 
-
+	// Function to allow for smooth removal of Runners(rows) in the table
 	function removeRow(btn) {
 	  const row = btn.closest('tr');
 	  const next = row.nextElementSibling;
@@ -199,6 +207,7 @@
 	  row.remove();
 	}
 
+	// Fuction to allow for the visibility switching of the individual parts and their fields in a runner
 	function toggleParts(btn) {
 	  const row = btn.closest('tr');
 	  const next = row.nextElementSibling;
@@ -244,11 +253,17 @@
 	  row.after(viewRow);
 	  btn.textContent = 'Hide';
 	}
-
+	
+	//This function converts a regular string to a url-handle compatible format
 	function toHandle(str) {
-	  return str.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
+	  return str
+	  .toLowerCase()			//Sets kit name to full lowercase	
+	  .trim()					//Removes any following spaces
+	  .replace(/[^\w\s-]/g, '')	//Removes punctiuation
+	  .replace(/\s*-\s*/g, '-');//Removes any spaces before or after a hyphen
 	}
-
+	
+	//This function loads the users input csv into the next function for parsing of the information
 	function importCSV(event) {
 	  const file = event.target.files[0];
 	  if (!file) return;
@@ -269,6 +284,7 @@
 	  const groups = {};
 
 	  data.forEach((row, i) => {
+		// This reads the handle for the next Runner, if this cannot be found generate one, this case shouldnt ever happen
 		const handle = row['Handle'] || `handle-${i}`;
 		if (!groups[handle]) groups[handle] = [];
 		groups[handle].push(row);
@@ -282,6 +298,7 @@
 		const main = rows[0];
 
 		const title = main['Title'] || handle;
+		// Remove any spaces in the barcode 
 		const barcode = main['Variant Barcode']?.replace(/'/g, '') || '';
 		const runnerName = main['Runner Name'] || handle.split('-').slice(-1)[0];
 		const partsCount = rows.length;
@@ -376,7 +393,7 @@
 		const partsCount = parseInt(partsInput.value.trim()) || 1;
 		const barcode = barcodeInput.value.trim();
 		const runner = runnerInput.value.trim();
-		const noteFromInput = (noteInput?.value || '').trim();
+		const noteFromInput = (noteInput?.value || 'N/A').trim();
 
 		const hiddenParts = JSON.parse(row.dataset.hidden || '[]');
 
