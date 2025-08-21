@@ -216,7 +216,8 @@
 		btn.textContent = 'Show';
 		return;
 	  }
-
+	  
+	  applyNotesToQuantities(row);
 	  const runnerName = row.querySelector('[name="runnerName"]').value;
 	  const title = row.querySelector('[name="title"]').value;
 	  const partsCount = parseInt(row.querySelector('[name="parts"]').value) || 1;
@@ -344,6 +345,61 @@
 		}
 
 		addRow(runnerName, handle, title, partsCount, barcode, `id-${++count}`, variantPrices, metadata);
+		// Expand & apply notes, then collapse back
+		const newRow = tableBody.lastElementChild;
+		const showBtn = newRow.querySelector("button");
+		if (showBtn) {
+		  toggleParts(showBtn);       // expand
+		  applyNotesToQuantities(newRow); 
+		  toggleParts(showBtn);       // collapse
+		}
+	  }
+	}
+
+
+	function applyNotesToQuantities(row) {
+	  const metadata = JSON.parse(row.dataset.metadata || '{}');
+	  const note = (metadata.note || '').trim();
+	  if (!note) return;
+
+	  // Get runner-specific info
+	  const partsCount = parseInt(row.querySelector('[name="parts"]').value) || 1;
+	  const runnerName = row.querySelector('[name="runnerName"]').value;
+
+	  // Default every part in this runner to qty = 1
+	  let quantities = {};
+	  for (let i = 1; i <= partsCount; i++) {
+		const variantName = `${runnerName}-${i}`;
+		quantities[variantName] = 1;
+	  }
+
+	  // Parse "PartXn: A-1, A-2, ..." patterns (case insensitive)
+	  const partRegex = /PartX(\d+):\s*([A-Za-z0-9\-,\s]+)/gi;
+	  let match;
+	  while ((match = partRegex.exec(note)) !== null) {
+		const qty = parseInt(match[1], 10);
+		const partsList = match[2].split(",").map(p => p.trim());
+		partsList.forEach(p => {
+		  if (quantities[p] !== undefined) {
+			quantities[p] = qty;
+		  }
+		});
+	  }
+
+	  // Parse "RunnerXn" — scoped only to this runner
+	  let runnerMultiplier = 1;
+	  const runnerMatch = note.match(/RunnerX(\d+)/i);
+	  if (runnerMatch) {
+		runnerMultiplier = parseInt(runnerMatch[1], 10);
+	  }
+
+	  // Apply final values into this runner’s part inputs
+	  for (let i = 1; i <= partsCount; i++) {
+		const variantName = `${runnerName}-${i}`;
+		const input = document.querySelector(`[name="inventoryQty-${variantName}"]`);
+		if (input) {
+		  input.value = (quantities[variantName] || 1) * runnerMultiplier;
+		}
 	  }
 	}
 
@@ -454,6 +510,10 @@
 			...HIDDEN_COLUMNS.map(k => {
 			  if (k === "Variant Grams") return "10";
 			  if (k === "Variant Inventory Tracker") return "shopify";
+			  if (k === "Variant Inventory Qty") {
+				const input = document.querySelector(`[name="inventoryQty-${vName}"]`);
+				return input ? input.value : "1";
+			  }
 			  if (k === "Variant Inventory Policy") return "deny";
 			  if (k === "Variant Fulfillment Service") return "manual";
 			  if (k === "Variant Price") return partPrice;
