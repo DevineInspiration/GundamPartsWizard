@@ -192,10 +192,13 @@
 	  // Keep dataset note in sync if user edits the Note field
 	  noteInput.addEventListener('input', () => {
 		try {
-		  const m = JSON.parse(tr.dataset.metadata || '{}');
-		  m.note = noteInput.value;
-		  tr.dataset.metadata = JSON.stringify(m);
+			const m = JSON.parse(tr.dataset.metadata || '{}');
+			m.note = noteInput.value;
+			tr.dataset.metadata = JSON.stringify(m);
 		} catch (e) {}
+
+		// Re-apply to this runner (updates dataset + visible inputs if open)
+		applyNotesToQuantities(tr);
 	  });
 	}
 
@@ -206,6 +209,108 @@
 	  if (next && next.classList.contains('parts-view')) next.remove();
 	  row.remove();
 	}
+	
+	function parseNoteQuantities(note, runnerName, partsCount) {
+	  // Build maps for case-insensitive lookup
+	  const mapUpperToActual = {};
+	  const quantities = {};
+	  for (let i = 1; i <= partsCount; i++) {
+		const actual = `${runnerName}-${i}`;
+		mapUpperToActual[actual.toUpperCase()] = actual;
+		quantities[actual] = 1; // default
+	  }
+
+	  if (!note) return quantities;
+
+	  // Match: PartXn: A-1, A-2   (and stop before next PartX/RunnerX or end)
+	  const partRegex = /PartX\s*(\d+)\s*:\s*([A-Za-z0-9\-\/,\s]+?)(?=(?:\s+PartX\s*\d+\s*:|\s+RunnerX\s*\d+|$))/gi;
+	  let m;
+	  while ((m = partRegex.exec(note)) !== null) {
+		const qty = parseInt(m[1], 10);
+		const rawList = m[2] || '';
+		// Allow commas or spaces
+		const tokens = rawList.replace(/,/g, ' ').split(/\s+/).map(t => t.trim()).filter(Boolean);
+		tokens.forEach(tok => {
+		  const key = tok.toUpperCase();
+		  const actual = mapUpperToActual[key];
+		  if (actual) quantities[actual] = qty;
+		});
+	  }
+
+	  // RunnerXn (can appear multiple times; multiply them)
+	  const multMatches = [...note.matchAll(/RunnerX\s*(\d+)/gi)];
+	  const runnerMultiplier = multMatches.length ? multMatches.reduce((acc, mm) => acc * parseInt(mm[1], 10), 1) : 1;
+
+	  // Apply multiplier only to this runner’s parts
+	  Object.keys(quantities).forEach(k => {
+		quantities[k] = quantities[k] * runnerMultiplier;
+	  });
+
+	  return quantities;
+	}
+
+	function applyNotesToQuantities(row) {
+	  const partsCount = parseInt(row.querySelector('[name="parts"]').value) || 1;
+
+	  // Load Option1 Values (real part names from CSV)
+	  let option1Values = [];
+	  try { option1Values = JSON.parse(row.dataset.option1Values || '[]'); } catch (e) {}
+	  if (!option1Values.length) {
+		// fallback to generated runner-# names if no CSV values exist
+		const runnerName = row.querySelector('[name="runnerName"]').value;
+		option1Values = Array.from({length: partsCount}, (_, i) => `${runnerName}-${i+1}`);
+	  }
+
+	  // Get the note text
+	  let note = '';
+	  const noteInput = row.querySelector('[name="note"]');
+	  if (noteInput && noteInput.value != null) {
+		note = String(noteInput.value).trim();
+	  } else {
+		try {
+		  const metadata = JSON.parse(row.dataset.metadata || '{}');
+		  note = (metadata.note || '').trim();
+		} catch (e) {}
+	  }
+
+	  // Default all parts to 1
+	  const quantities = {};
+	  option1Values.forEach(v => { quantities[v] = 1; });
+
+	  // Parse "PartXn: ..." rules
+	  const partRegex = /PartX\s*(\d+)\s*:\s*([A-Za-z0-9\-\/,\s]+?)(?=(?:\s+PartX\s*\d+\s*:|\s+RunnerX\s*\d+|$))/gi;
+	  let m;
+	  while ((m = partRegex.exec(note)) !== null) {
+		const qty = parseInt(m[1], 10);
+		const rawList = m[2] || '';
+		const tokens = rawList.replace(/,/g, ' ').split(/\s+/).map(t => t.trim()).filter(Boolean);
+		tokens.forEach(tok => {
+		  // Case-insensitive match against Option1 Values
+		  const matchVal = option1Values.find(v => v.toUpperCase() === tok.toUpperCase());
+		  if (matchVal) quantities[matchVal] = qty;
+		});
+	  }
+
+	  // Apply RunnerXn multiplier (to all parts of this runner only)
+	  const multMatches = [...note.matchAll(/RunnerX\s*(\d+)/gi)];
+	  const runnerMultiplier = multMatches.length ? multMatches.reduce((acc, mm) => acc * parseInt(mm[1], 10), 1) : 1;
+	  Object.keys(quantities).forEach(k => {
+		quantities[k] = quantities[k] * runnerMultiplier;
+	  });
+
+	  // Save for export
+	  row.dataset.quantities = JSON.stringify(quantities);
+
+	  // Update inputs if parts view is open
+	  const partsView = row.nextElementSibling;
+	  if (partsView && partsView.classList.contains('parts-view')) {
+		option1Values.forEach(v => {
+		  const input = partsView.querySelector(`input[name="inventoryQty-${v}"]`);
+		  if (input) input.value = quantities[v] ?? 1;
+		});
+	  }
+	}
+
 
 	// Fuction to allow for the visibility switching of the individual parts and their fields in a runner
 	function toggleParts(btn) {
@@ -229,23 +334,26 @@
 		<th>#</th><th>Variant Name</th><th>Variant SKU</th><th>Runner</th><th>Title</th><th>Inventory Qty</th><th>Part Price</th></tr>`;
 
 	  const variantPrices = JSON.parse(row.dataset.variantPrices || '[]');
-
+	  
+	  let option1Values = [];
+	  try { option1Values = JSON.parse(row.dataset.option1Values || '[]'); } catch (e) {}
+	  
 	  for (let i = 1; i <= partsCount; i++) {
-		const variantName = `${runnerName}-${i}`;
+		const option1Val = option1Values[i-1] || `${runnerName}-${i}`;
 		let variantSKU = barcode;
 		if (!barcode.includes('-')) {
-		  variantSKU = `${barcode} ${variantName}`;
+		  variantSKU = `${barcode} ${option1Val}`;
 		}
 		const priceVal = variantPrices[i - 1] || '';
 
 		html += `<tr>
 		  <td>${i}</td>
-		  <td>${variantName}</td>
+		  <td>${option1Val}</td>
 		  <td>${variantSKU}</td>
 		  <td>${runnerName}</td>
 		  <td>${title}</td>
-		  <td><input name="inventoryQty-${variantName}" type="number" value="1" min="0" /></td>
-		  <td><input name="partPrice-${variantName}" type="number" value="${priceVal}" step="0.01" min="0" /></td>
+		  <td><input name="inventoryQty-${option1Val}" type="number" value="1" min="0" /></td>
+		  <td><input name="partPrice-${option1Val}" type="number" value="${priceVal}" step="0.01" min="0" /></td>
 		</tr>`;
 	  }
 
@@ -327,6 +435,9 @@
 		  status: main["Status"] || 'draft',
 		};
 
+		// Extract original Option1 Values (part names)
+		const option1Values = rows.map(r => r['Option1 Value'] || '');
+
 		// Save first runner metadata, but exclude "note"
 		if (!firstRunnerMetadata) {
 		  firstRunnerMetadata = {
@@ -347,59 +458,8 @@
 		addRow(runnerName, handle, title, partsCount, barcode, `id-${++count}`, variantPrices, metadata);
 		// Expand & apply notes, then collapse back
 		const newRow = tableBody.lastElementChild;
-		const showBtn = newRow.querySelector("button");
-		if (showBtn) {
-		  toggleParts(showBtn);       // expand
-		  applyNotesToQuantities(newRow); 
-		  toggleParts(showBtn);       // collapse
-		}
-	  }
-	}
-
-
-	function applyNotesToQuantities(row) {
-	  const metadata = JSON.parse(row.dataset.metadata || '{}');
-	  const note = (metadata.note || '').trim();
-	  if (!note) return;
-
-	  // Get runner-specific info
-	  const partsCount = parseInt(row.querySelector('[name="parts"]').value) || 1;
-	  const runnerName = row.querySelector('[name="runnerName"]').value;
-
-	  // Default every part in this runner to qty = 1
-	  let quantities = {};
-	  for (let i = 1; i <= partsCount; i++) {
-		const variantName = `${runnerName}-${i}`;
-		quantities[variantName] = 1;
-	  }
-
-	  // Parse "PartXn: A-1, A-2, ..." patterns (case insensitive)
-	  const partRegex = /PartX(\d+):\s*([A-Za-z0-9\-,\s]+)/gi;
-	  let match;
-	  while ((match = partRegex.exec(note)) !== null) {
-		const qty = parseInt(match[1], 10);
-		const partsList = match[2].split(",").map(p => p.trim());
-		partsList.forEach(p => {
-		  if (quantities[p] !== undefined) {
-			quantities[p] = qty;
-		  }
-		});
-	  }
-
-	  // Parse "RunnerXn" — scoped only to this runner
-	  let runnerMultiplier = 1;
-	  const runnerMatch = note.match(/RunnerX(\d+)/i);
-	  if (runnerMatch) {
-		runnerMultiplier = parseInt(runnerMatch[1], 10);
-	  }
-
-	  // Apply final values into this runner’s part inputs
-	  for (let i = 1; i <= partsCount; i++) {
-		const variantName = `${runnerName}-${i}`;
-		const input = document.querySelector(`[name="inventoryQty-${variantName}"]`);
-		if (input) {
-		  input.value = (quantities[variantName] || 1) * runnerMultiplier;
-		}
+		newRow.dataset.option1Values = JSON.stringify(option1Values);
+		applyNotesToQuantities(newRow);
 	  }
 	}
 
@@ -408,29 +468,29 @@
 	  const partPrice = document.getElementById('globalPartPrice')?.value.trim() || '';
 
 	  const rows = [[
-	  'Handle', 'Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tags', 'Published',
-	  'Option1 Name', 'Option1 Value', 'Option1 Linked To',
-	  'Option2 Name', 'Option2 Value', 'Option2 Linked To',
-	  'Option3 Name', 'Option3 Value', 'Option3 Linked To',
-	  'Variant SKU', ...HIDDEN_COLUMNS,
-	  'Variant Barcode', 'Image Src', 'Image Position', 'Image Alt Text', 'Gift Card',
-	  'SEO Title', 'SEO Description', 'Google Shopping / Google Product Category',
-	  'Google Shopping / Gender', 'Google Shopping / Age Group', 'Google Shopping / MPN',
-	  'Google Shopping / Condition', 'Google Shopping / Custom Product',
-	  'Google Shopping / Custom Label 0', 'Google Shopping / Custom Label 1',
-	  'Google Shopping / Custom Label 2', 'Google Shopping / Custom Label 3',
-	  'Google Shopping / Custom Label 4', 'Grade (product.metafields.custom.grade)',
-	  'Model Kit (product.metafields.custom.model_kit)',
-	  'Note (product.metafields.custom.note)', 'Scale (product.metafields.custom.scale)',
-	  'Series (product.metafields.custom.series)',
-	  'SupplierReference (product.metafields.custom.supplierreference)',
-	  'Google: Custom Product (product.metafields.mm-google-shopping.custom_product)',
-	  'Complementary products (product.metafields.shopify--discovery--product_recommendation.complementary_products)',
-	  'Related products (product.metafields.shopify--discovery--product_recommendation.related_products)',
-	  'Related products settings (product.metafields.shopify--discovery--product_recommendation.related_products_display)',
-	  'Search product boosts (product.metafields.shopify--discovery--product_search_boost.queries)',
-	  'Variant Image', 'Variant Weight Unit', 'Variant Tax Code', 'Cost per item', 'Status'
-	]];
+		'Handle', 'Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tags', 'Published',
+		'Option1 Name', 'Option1 Value', 'Option1 Linked To',
+		'Option2 Name', 'Option2 Value', 'Option2 Linked To',
+		'Option3 Name', 'Option3 Value', 'Option3 Linked To',
+		'Variant SKU', ...HIDDEN_COLUMNS,
+		'Variant Barcode', 'Image Src', 'Image Position', 'Image Alt Text', 'Gift Card',
+		'SEO Title', 'SEO Description', 'Google Shopping / Google Product Category',
+		'Google Shopping / Gender', 'Google Shopping / Age Group', 'Google Shopping / MPN',
+		'Google Shopping / Condition', 'Google Shopping / Custom Product',
+		'Google Shopping / Custom Label 0', 'Google Shopping / Custom Label 1',
+		'Google Shopping / Custom Label 2', 'Google Shopping / Custom Label 3',
+		'Google Shopping / Custom Label 4', 'Grade (product.metafields.custom.grade)',
+		'Model Kit (product.metafields.custom.model_kit)',
+		'Note (product.metafields.custom.note)', 'Scale (product.metafields.custom.scale)',
+		'Series (product.metafields.custom.series)',
+		'SupplierReference (product.metafields.custom.supplierreference)',
+		'Google: Custom Product (product.metafields.mm-google-shopping.custom_product)',
+		'Complementary products (product.metafields.shopify--discovery--product_recommendation.complementary_products)',
+		'Related products (product.metafields.shopify--discovery--product_recommendation.related_products)',
+		'Related products settings (product.metafields.shopify--discovery--product_recommendation.related_products_display)',
+		'Search product boosts (product.metafields.shopify--discovery--product_search_boost.queries)',
+		'Variant Image', 'Variant Weight Unit', 'Variant Tax Code', 'Cost per item', 'Status'
+	  ]];
 
 	  const seenRunners = new Set();
 
@@ -481,11 +541,21 @@
 		  note = noteFromInput; // still keep the user's input if metadata broken
 		}
 
+		// Ensure latest quantities from Note
+		applyNotesToQuantities(row);
+		let qtyMap = {};
+		try { qtyMap = JSON.parse(row.dataset.quantities || '{}'); } catch (e) {}
+
+		// Load original Option1 Values (part names)
+		let option1Values = [];
+		try { option1Values = JSON.parse(row.dataset.option1Values || '[]'); } catch (e) {}
+
 		for (let i = 1; i <= partsCount; i++) {
 		  const vName = `${runner}-${i}`;
+		  const option1Val = option1Values[i - 1] || vName;
 		  let vSKU = barcode;
 		  if (!barcode.includes('-')) {
-			vSKU = `${barcode} ${vName}`;
+			vSKU = `${barcode} ${option1Val}`;
 		  }
 
 		  rows.push([
@@ -498,7 +568,7 @@
 			(i === 1 && isFirstRunner) ? tags : '',
 			(i === 1 && isFirstRunner) ? published : '',
 			'Part',
-			vName.toUpperCase(),
+			option1Val, // use original from CSV
 			'',
 			'',
 			'',
@@ -511,8 +581,9 @@
 			  if (k === "Variant Grams") return "10";
 			  if (k === "Variant Inventory Tracker") return "shopify";
 			  if (k === "Variant Inventory Qty") {
-				const input = document.querySelector(`[name="inventoryQty-${vName}"]`);
-				return input ? input.value : "1";
+				// Use the Option1 Value key – this is what applyNotesToQuantities stored
+				const key = option1Val;
+				return (qtyMap[key] != null) ? qtyMap[key] : "1";
 			  }
 			  if (k === "Variant Inventory Policy") return "deny";
 			  if (k === "Variant Fulfillment Service") return "manual";
