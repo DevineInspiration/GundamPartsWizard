@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css">
   <title>Gundam Parts Wizard - Clean Export (V3.8)</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
+    body { font-family: Tahoma, sans-serif; margin: 20px; }
     table { border-collapse: collapse; width: 100%; margin-top: 10px; table-layout: fixed; }
     th, td { border: 1px solid #aaa; padding: 8px; box-sizing: border-box; }
     input, select { width: 100%; box-sizing: border-box; }
@@ -28,7 +29,7 @@
 
   <input type="file" id="csvFileInput" accept=".csv" onchange="importCSV(event)" />
   
-  <div style="margin-top: 10px;">
+  <div style="margin-top: 10px; margin-bottom: 10px">
     <label><strong>Kit Name:</strong></label>
     <input type="text" id="globalKitName" placeholder="e.g. RX-78-2 Gundam" style="width: 300px; margin-right: 20px;" />
 	<label><strong>Kit Barcode:</strong></label>
@@ -37,8 +38,10 @@
     <input type="number" id="globalPartPrice" placeholder="e.g. 3.50" style="width: 100px;" step="0.01" />
   </div>
   
-  <button onclick="addRow()">Add Row</button>
-  <button onclick="downloadCSV()">Download CSV</button>
+  <div style="margin-top: 10px; margin-bottom: 40px">
+	<button onclick="addRow()">Add Row</button>
+	<button onclick="downloadCSV()">Download CSV</button>
+  </div>
 
   <div id="inputTableWrapper" class="table-wrapper">
     <table id="inputTable">
@@ -163,10 +166,10 @@
 		<td><input name="Handle" value="${listingHandle}" /></td>
 		<td><input name="title" value="${listingTitle}" /></td>
 		<td><input name="parts" type="number" value="${partsCount}" min="1" /></td>
-		<td><button onclick="toggleParts(this)">Show</button></td>
+		<td align="center"><button onclick="toggleParts(this)">Show</button></td>
 		<td><input name="barcode" value="${partBarcode}" /></td>
 		<td><input class="note-input" name="note" placeholder="Optional stock note for this runner" value="${noteVal.replace(/"/g, '&quot;')}" /></td>
-		<td><button onclick="removeRow(this)">Remove</button></td>
+		<td align="center"><button onclick="removeRow(this)">Remove</button></td>
 	  `;
 	  tableBody.appendChild(tr);
 
@@ -579,16 +582,16 @@
 			...HIDDEN_COLUMNS.map(k => {
 			  if (k === "Variant Grams") return "10";
 			  if (k === "Variant Inventory Tracker") return "shopify";
-			  if (k === "Variant Inventory Qty") {
-				// Use the Option1 Value key – this is what applyNotesToQuantities stored
-				const key = option1Val;
-				return (qtyMap[key] != null) ? qtyMap[key] : "1";
-			  }
 			  if (k === "Variant Inventory Policy") return "deny";
 			  if (k === "Variant Fulfillment Service") return "manual";
 			  if (k === "Variant Price") return partPrice;
 			  if (k === "Variant Requires Shipping") return "TRUE";
 			  if (k === "Variant Taxable") return "TRUE";
+			  if (k === "Variant Inventory Qty") {
+				// Use the Option1 Value key – this is what applyNotesToQuantities stored
+				const key = option1Val;
+				return (qtyMap[key] != null) ? qtyMap[key] : "1";
+			  }
 			}),
 			barcode,
 			(i === 1 && isFirstRunner) ? image : '',
@@ -642,5 +645,52 @@
 
     addRow();
   </script>
+  <script id="theme-toggle-script">
+	(() => {
+	  const KEY = 'gpw-theme';
+	  // Create button if not present
+	  let btn = document.getElementById('themeToggle');
+	  if (!btn) {
+		btn = document.createElement('button');
+		btn.id = 'themeToggle';
+		btn.type = 'button';
+		btn.className = 'theme-toggle';
+		btn.setAttribute('aria-label', 'Toggle dark mode');
+		btn.setAttribute('aria-pressed', 'false');
+		const span = document.createElement('span');
+		span.className = 'icon';
+		span.setAttribute('aria-hidden', 'true');
+		btn.appendChild(span);
+		document.body.appendChild(btn);
+	  }
+
+	  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+	  function apply(theme) {
+		const root = document.documentElement;
+		if (theme === 'light') {
+		  root.setAttribute('data-theme', 'light');
+		  btn.setAttribute('aria-pressed', 'true');
+		} else if (theme === 'dark') {
+		  root.setAttribute('data-theme', 'dark');
+		  btn.setAttribute('aria-pressed', 'false');
+		} else {
+		  root.removeAttribute('data-theme'); // fall back to system/media
+		  btn.setAttribute('aria-pressed', prefersDark ? 'false' : 'true');
+		}
+	  }
+
+	  // Init: load saved theme or fall back to system
+	  const saved = localStorage.getItem(KEY);
+	  apply(saved || (prefersDark ? 'dark' : 'light'));
+
+	  // Toggle between explicit dark/light and persist
+	  btn.addEventListener('click', () => {
+		const current = document.documentElement.getAttribute('data-theme');
+		const next = current === 'dark' ? 'light' : 'dark';
+		localStorage.setItem(KEY, next);
+		apply(next);
+	  });
+	})();
+</script>
 </body>
 </html>
